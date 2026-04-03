@@ -16,5 +16,8 @@
   },
   "devDependencies": {
     "tsx": "^4.21.0"
+  },
+  "scripts": {
+    "start": "npx tsx server.js"
   }
 }
