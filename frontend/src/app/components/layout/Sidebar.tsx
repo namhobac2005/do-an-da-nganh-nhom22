@@ -4,7 +4,7 @@
  * Hiển thị menu theo role (Admin/User)
  */
 
-import { NavLink, useLocation } from 'react-router';
+import { NavLink, useLocation } from "react-router";
 import {
   LayoutDashboard,
   Waves,
@@ -19,8 +19,10 @@ import {
   LogOut,
   Settings,
   Zap,
-} from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+  Clock,
+  Activity,
+} from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
 
 // ===== MENU STRUCTURE =====
 
@@ -39,39 +41,88 @@ interface NavGroup {
 
 const NAV_GROUPS: NavGroup[] = [
   {
-    title: 'TỔNG QUAN',
+    title: "TỔNG QUAN",
     items: [
-      { path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
+      {
+        path: "/dashboard",
+        label: "Dashboard",
+        icon: <LayoutDashboard size={18} />,
+      },
     ],
   },
   {
-    title: 'QUẢN TRỊ HỆ THỐNG',
+    title: "QUẢN TRỊ HỆ THỐNG",
     items: [
-      { path: '/admin/zones', label: 'Vùng Ao (Zone)', icon: <Waves size={18} />, adminOnly: true },
-      { path: '/admin/ponds', label: 'Ao Nuôi', icon: <Fish size={18} />, adminOnly: true },
-      { path: '/admin/devices', label: 'Thiết Bị', icon: <Cpu size={18} />, adminOnly: true },
-      { path: '/admin/users', label: 'Tài Khoản', icon: <Users size={18} />, adminOnly: true },
+      {
+        path: "/admin/zones",
+        label: "Vùng Ao (Zone)",
+        icon: <Waves size={18} />,
+        adminOnly: true,
+      },
+      {
+        path: "/admin/ponds",
+        label: "Ao Nuôi",
+        icon: <Fish size={18} />,
+        adminOnly: true,
+      },
+      {
+        path: "/admin/devices",
+        label: "Thiết Bị",
+        icon: <Cpu size={18} />,
+        adminOnly: true,
+      },
+      {
+        path: "/admin/users",
+        label: "Tài Khoản",
+        icon: <Users size={18} />,
+        adminOnly: true,
+      },
     ],
   },
   {
-    title: 'GIÁM SÁT & VẬN HÀNH',
+    title: "GIÁM SÁT & VẬN HÀNH",
     items: [
-      { path: '/monitoring', label: 'Giám Sát Real-time', icon: <Gauge size={18} /> },
-      { path: '/control', label: 'Điều Khiển Thiết Bị', icon: <Zap size={18} /> },
+      {
+        path: "/monitoring",
+        label: "Giám Sát Real-time",
+        icon: <Gauge size={18} />,
+      },
+      {
+        path: "/control",
+        label: "Điều Khiển Thiết Bị",
+        icon: <Zap size={18} />,
+      },
+      {
+        path: "/schedule",
+        label: "Lập Lịch Tự Động",
+        icon: <Clock size={18} />,
+      },
+      {
+        path: "/logs",
+        label: "Ghi Chép Hoạt Động",
+        icon: <Activity size={18} />,
+      },
     ],
   },
   {
-    title: 'BÁO CÁO & CẢNH BÁO',
+    title: "BÁO CÁO & CẢNH BÁO",
     items: [
-      { path: '/alerts', label: 'Cảnh Báo', icon: <BellRing size={18} />, badge: 3 },
-      { path: '/reports', label: 'Báo Cáo & Thống Kê', icon: <BarChart3 size={18} /> },
+      {
+        path: "/alerts",
+        label: "Cảnh Báo",
+        icon: <BellRing size={18} />,
+        badge: 3,
+      },
+      {
+        path: "/reports",
+        label: "Báo Cáo & Thống Kê",
+        icon: <BarChart3 size={18} />,
+      },
     ],
   },
   {
-    title: 'HỖ TRỢ AI',
-    items: [
-      { path: '/chatbot', label: 'Chatbot AI', icon: <Bot size={18} /> },
-    ],
+    title: "HỖ TRỢ AI",
+    items: [{ path: "/chatbot", label: "Chatbot AI", icon: <Bot size={18} /> }],
   },
 ];
 
@@ -84,7 +135,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const { user, logout, hasRole } = useAuth();
   const location = useLocation();
 
-  const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
+  const isActive = (path: string) =>
+    location.pathname === path || location.pathname.startsWith(path + "/");
 
   return (
     <>
@@ -102,7 +154,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           fixed top-0 left-0 h-full z-30 flex flex-col
           w-64 bg-[#0A3622] text-white
           transition-transform duration-300 ease-in-out
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+          ${isOpen ? "translate-x-0" : "-translate-x-full"}
           lg:translate-x-0 lg:static lg:z-auto
         `}
       >
@@ -112,21 +164,27 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             <Fish size={20} className="text-[#0A3622]" />
           </div>
           <div>
-            <p className="text-white text-sm" style={{ fontWeight: 700, lineHeight: 1.2 }}>
+            <p
+              className="text-white text-sm"
+              style={{ fontWeight: 700, lineHeight: 1.2 }}
+            >
               AquaSmart
             </p>
-            <p className="text-emerald-400/80" style={{ fontSize: '11px', lineHeight: 1.3 }}>
+            <p
+              className="text-emerald-400/80"
+              style={{ fontSize: "11px", lineHeight: 1.3 }}
+            >
               Quản lý ao nuôi thông minh
             </p>
           </div>
         </div>
 
-        {/* Navigation Menu */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-5">
+        {/* Navigation Menu - Ẩn thanh cuộn */}
+        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-5 hide-scrollbar">
           {NAV_GROUPS.map((group) => {
             // Lọc menu theo role
             const visibleItems = group.items.filter(
-              (item) => !item.adminOnly || hasRole('admin')
+              (item) => !item.adminOnly || hasRole("admin"),
             );
 
             if (visibleItems.length === 0) return null;
@@ -135,7 +193,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               <div key={group.title}>
                 <p
                   className="text-white/40 px-3 mb-2"
-                  style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.08em' }}
+                  style={{
+                    fontSize: "10px",
+                    fontWeight: 600,
+                    letterSpacing: "0.08em",
+                  }}
                 >
                   {group.title}
                 </p>
@@ -150,29 +212,45 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                           transition-all duration-150 group relative
                           ${
                             isActive(item.path)
-                              ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/30'
-                              : 'text-white/70 hover:bg-white/10 hover:text-white'
+                              ? "bg-emerald-500 text-white shadow-lg shadow-emerald-900/30"
+                              : "text-white/70 hover:bg-white/10 hover:text-white"
                           }
                         `}
                       >
-                        <span className={isActive(item.path) ? 'text-white' : 'text-white/60 group-hover:text-white'}>
+                        <span
+                          className={
+                            isActive(item.path)
+                              ? "text-white"
+                              : "text-white/60 group-hover:text-white"
+                          }
+                        >
                           {item.icon}
                         </span>
-                        <span style={{ fontSize: '13.5px', fontWeight: isActive(item.path) ? 600 : 400 }}>
+                        <span
+                          style={{
+                            fontSize: "13.5px",
+                            fontWeight: isActive(item.path) ? 600 : 400,
+                          }}
+                        >
                           {item.label}
                         </span>
 
                         {/* Badge cảnh báo */}
                         {item.badge && item.badge > 0 && (
-                          <span className="ml-auto bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center"
-                            style={{ fontSize: '11px', fontWeight: 700 }}>
+                          <span
+                            className="ml-auto bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center"
+                            style={{ fontSize: "11px", fontWeight: 700 }}
+                          >
                             {item.badge}
                           </span>
                         )}
 
                         {/* Active indicator */}
                         {isActive(item.path) && (
-                          <ChevronRight size={14} className="ml-auto opacity-70" />
+                          <ChevronRight
+                            size={14}
+                            className="ml-auto opacity-70"
+                          />
                         )}
                       </NavLink>
                     </li>
@@ -191,22 +269,31 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-white/60 hover:bg-white/10 hover:text-white transition-colors"
           >
             <Settings size={17} />
-            <span style={{ fontSize: '13.5px' }}>Cài Đặt</span>
+            <span style={{ fontSize: "13.5px" }}>Cài Đặt</span>
           </NavLink>
 
           {/* User Info */}
           <div className="flex items-center gap-3 px-3 py-2 mt-1">
             <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center shrink-0">
-              <span className="text-white" style={{ fontSize: '13px', fontWeight: 700 }}>
+              <span
+                className="text-white"
+                style={{ fontSize: "13px", fontWeight: 700 }}
+              >
                 {user?.name?.charAt(0).toUpperCase()}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-white truncate" style={{ fontSize: '13px', fontWeight: 600 }}>
+              <p
+                className="text-white truncate"
+                style={{ fontSize: "13px", fontWeight: 600 }}
+              >
                 {user?.name}
               </p>
-              <p className="text-white/50 truncate" style={{ fontSize: '11px' }}>
-                {user?.role === 'admin' ? 'Quản trị viên' : 'Người dùng'}
+              <p
+                className="text-white/50 truncate"
+                style={{ fontSize: "11px" }}
+              >
+                {user?.role === "admin" ? "Quản trị viên" : "Người dùng"}
               </p>
             </div>
             <button
@@ -219,6 +306,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
       </aside>
+
+      {/* CSS ẩn thanh cuộn nhưng vẫn giữ chức năng cuộn */}
+      <style>{`
+        .hide-scrollbar {
+          scrollbar-width: none; /* Firefox */
+          -ms-overflow-style: none; /* IE and Edge */
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none; /* Chrome, Safari, Opera */
+        }
+      `}</style>
     </>
   );
 };
