@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
-import * as deviceService from '../services/device.service.ts'; // Import service của bạn
+import { Request, Response } from "express";
+import * as deviceService from "../services/device.service.ts"; // Import service của bạn
 
 // Định nghĩa lại kiểu cho Request vì mặc định Express không có thuộc tính `req.user`
 interface CustomRequest extends Request {
@@ -37,5 +37,20 @@ export const controlDevice = async (req: CustomRequest, res: Response) => {
     res.status(200).json(result);
   } catch (error: any) {
     res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// Get device logs
+export const getDeviceLogs = async (req: Request, res: Response) => {
+  try {
+    const deviceId = req.params.id;
+    const { from, to, limit = "50" } = req.query;
+    // Import report service here or move logic
+    // For simplicity, use supabase direct or report service
+    res
+      .status(501)
+      .json({ success: false, message: "Use /reports/devices/:id/logs" });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };

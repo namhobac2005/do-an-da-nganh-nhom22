@@ -1,7 +1,7 @@
-import axios from 'axios';
-import mqtt from 'mqtt';
-import { createClient } from '@supabase/supabase-js';
-import dotenv from 'dotenv';
+import axios from "axios";
+import mqtt from "mqtt";
+import { createClient } from "@supabase/supabase-js";
+import dotenv from "dotenv";
 
 dotenv.config();
 
@@ -15,16 +15,16 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Danh sách feed key dùng chung cho toàn bộ service
 const FEEDS = [
-  'temperature',
-  'water-level',
-  'light',
-  'pump',
-  'fan',
-  'servo',
-  'brightness',
+  "temperature",
+  "water-level",
+  "light",
+  "pump",
+  "fan",
+  "servo",
+  "brightness",
 ];
 
-const client = mqtt.connect('mqtts://io.adafruit.com', {
+const client = mqtt.connect("mqtts://io.adafruit.com", {
   username: aioUsername,
   password: aioKey,
 });
@@ -33,41 +33,41 @@ const client = mqtt.connect('mqtts://io.adafruit.com', {
  * KHỞI TẠO LẮNG NGHE MQTT (REAL-TIME)
  */
 export const initMQTT = () => {
-  client.on('connect', () => {
-    console.log('MQTT Connected to Adafruit IO!');
+  client.on("connect", () => {
+    console.log("MQTT Connected to Adafruit IO!");
 
     FEEDS.forEach((feed) => {
       client.subscribe(`${aioUsername}/feeds/${feed}`);
     });
   });
 
-  client.on('message', async (topic, message) => {
+  client.on("message", async (topic, message) => {
     const value = message.toString();
-    const feedKey = topic.split('/').pop() || '';
+    const feedKey = topic.split("/").pop() || "";
 
     try {
       // 1. Tìm Actuator - Dùng maybeSingle() để không bị văng lỗi nếu không có
       const { data: actuator, error: actErr } = await supabase
-        .from('actuators')
-        .select('id, mode')
-        .eq('type', feedKey)
+        .from("actuators")
+        .select("id, mode")
+        .eq("type", feedKey)
         .maybeSingle(); // Trả về null nếu không tìm thấy, không báo lỗi
 
       if (actuator) {
         const newStatus =
-          value === '0' || value.toLowerCase() === 'off' ? 'OFF' : 'ON';
+          value === "0" || value.toLowerCase() === "off" ? "OFF" : "ON";
 
         await supabase
-          .from('actuators')
+          .from("actuators")
           .update({ status: newStatus })
-          .eq('id', actuator.id);
+          .eq("id", actuator.id);
 
-        await supabase.from('actuator_logs').insert([
+        await supabase.from("actuator_logs").insert([
           {
             actuator_id: actuator.id,
             action: `MQTT: ${value}`,
             status: newStatus,
-            mode: actuator.mode || 'auto',
+            mode: actuator.mode || "auto",
           },
         ]);
         console.log(`[Actuator] ${feedKey} updated.`);
@@ -76,13 +76,13 @@ export const initMQTT = () => {
 
       // 2. Tìm Sensor - Tương tự dùng maybeSingle()
       const { data: sensor, error: senErr } = await supabase
-        .from('sensors')
-        .select('id')
-        .eq('type', feedKey)
+        .from("sensors")
+        .select("id")
+        .eq("type", feedKey)
         .maybeSingle();
 
       if (sensor) {
-        await supabase.from('sensor_data').insert([
+        await supabase.from("sensor_data").insert([
           {
             sensor_id: sensor.id,
             value: parseFloat(value),
@@ -96,12 +96,12 @@ export const initMQTT = () => {
         );
       }
     } catch (err: any) {
-      console.error('Lỗi logic MQTT:', err.message);
+      console.error("Lỗi logic MQTT:", err.message);
     }
   });
 
-  client.on('error', (err) => {
-    console.error('Lỗi kết nối MQTT:', err);
+  client.on("error", (err) => {
+    console.error("Lỗi kết nối MQTT:", err);
   });
 };
 
@@ -109,45 +109,45 @@ export const initMQTT = () => {
  * ĐỒNG BỘ DỮ LIỆU CŨ/CÓ SẴN (HTTP API)
  */
 export const syncAllDataFromAdafruit = async () => {
-  console.log('Bắt đầu quét Adafruit để khởi tạo Database...');
+  console.log("Bắt đầu quét Adafruit để khởi tạo Database...");
 
   for (const feedKey of FEEDS) {
     try {
       // 1. Lấy dữ liệu cuối cùng từ Adafruit
       const response = await axios.get(
         `https://io.adafruit.com/api/v2/${aioUsername}/feeds/${feedKey}/data/last`,
-        { headers: { 'X-AIO-Key': aioKey } },
+        { headers: { "X-AIO-Key": aioKey } },
       );
 
       const lastValue = response.data.value;
       const feedName = feedKey.charAt(0).toUpperCase() + feedKey.slice(1); // Tự tạo tên (VD: Temperature)
 
       // 2. PHÂN LOẠI: Cái nào là Actuator (thiết bị), cái nào là Sensor (cảm biến)
-      const isActuator = ['light', 'pump', 'fan', 'servo'].includes(feedKey);
+      const isActuator = ["light", "pump", "fan", "servo"].includes(feedKey);
 
       if (isActuator) {
         // 1. Kiểm tra xem đã có trong DB chưa
         let { data: actuator, error: fetchError } = await supabase
-          .from('actuators')
-          .select('id')
-          .eq('type', feedKey)
+          .from("actuators")
+          .select("id")
+          .eq("type", feedKey)
           .maybeSingle();
 
         const statusValue =
-          lastValue === '0' || lastValue.toLowerCase() === 'off' ? 'OFF' : 'ON';
+          lastValue === "0" || lastValue.toLowerCase() === "off" ? "OFF" : "ON";
 
         if (!actuator) {
           console.log(`Đang thử tạo mới Actuator: ${feedKey}`);
 
           // 2. Thêm mới nếu chưa có
           const { data: newAct, error: insertError } = await supabase
-            .from('actuators')
+            .from("actuators")
             .insert([
               {
                 name: feedName,
                 type: feedKey,
                 status: statusValue,
-                mode: 'manual',
+                mode: "manual",
                 // Tuyệt đối không điền pond_id ở đây nếu chưa có ao
               },
             ])
@@ -167,9 +167,9 @@ export const syncAllDataFromAdafruit = async () => {
         } else {
           // 3. Nếu đã có thì cập nhật trạng thái
           const { error: updateError } = await supabase
-            .from('actuators')
+            .from("actuators")
             .update({ status: statusValue })
-            .eq('id', actuator.id);
+            .eq("id", actuator.id);
 
           if (updateError)
             console.error(
@@ -185,13 +185,13 @@ export const syncAllDataFromAdafruit = async () => {
         // 4. Ghi log (Chỉ ghi nếu có actuator ID)
         if (actuator) {
           const { error: logError } = await supabase
-            .from('actuator_logs')
+            .from("actuator_logs")
             .insert([
               {
                 actuator_id: actuator.id,
                 action: `Initial Sync: ${lastValue}`,
                 status: statusValue,
-                mode: 'manual',
+                mode: "manual",
               },
             ]);
           if (logError)
@@ -200,21 +200,21 @@ export const syncAllDataFromAdafruit = async () => {
       } else {
         // LÀ CẢM BIẾN (Sensor)
         let { data: sensor } = await supabase
-          .from('sensors')
-          .select('id')
-          .eq('type', feedKey)
+          .from("sensors")
+          .select("id")
+          .eq("type", feedKey)
           .maybeSingle();
 
         if (!sensor) {
           console.log(`Tạo mới Sensor: ${feedKey}`);
           const { data: newSen, error } = await supabase
-            .from('sensors')
+            .from("sensors")
             .insert([
               {
                 name: feedName,
                 type: feedKey,
-                status: 'active',
-                unit: feedKey === 'temperature' ? '°C' : '%',
+                status: "active",
+                unit: feedKey === "temperature" ? "°C" : "%",
               },
             ])
             .select()
@@ -224,7 +224,7 @@ export const syncAllDataFromAdafruit = async () => {
 
         // Sau khi đã có Sensor ID (dù mới tạo hay đã có), ghi dữ liệu vào sensor_data
         if (sensor && lastValue !== undefined) {
-          await supabase.from('sensor_data').insert([
+          await supabase.from("sensor_data").insert([
             {
               sensor_id: sensor.id,
               value: parseFloat(lastValue),
@@ -239,7 +239,7 @@ export const syncAllDataFromAdafruit = async () => {
       }
     }
   }
-  console.log('Hệ thống đã sẵn sàng với dữ liệu từ Adafruit!');
+  console.log("Hệ thống đã sẵn sàng với dữ liệu từ Adafruit!");
 };
 
 export const startSensorPolling = () => {
@@ -248,26 +248,26 @@ export const startSensorPolling = () => {
       try {
         const res = await axios.get(
           `https://io.adafruit.com/api/v2/${aioUsername}/feeds/${feedKey}/data/last`,
-          { headers: { 'X-AIO-Key': aioKey } },
+          { headers: { "X-AIO-Key": aioKey } },
         );
 
         const value = res.data.value;
 
         // chỉ xử lý sensor
-        const isSensor = ['temperature', 'water-level', 'brightness'].includes(
+        const isSensor = ["temperature", "water-level", "brightness"].includes(
           feedKey,
         );
 
         if (!isSensor) continue;
 
         const { data: sensor } = await supabase
-          .from('sensors')
-          .select('id')
-          .eq('type', feedKey)
+          .from("sensors")
+          .select("id")
+          .eq("type", feedKey)
           .maybeSingle();
 
         if (sensor) {
-          await supabase.from('sensor_data').insert([
+          await supabase.from("sensor_data").insert([
             {
               sensor_id: sensor.id,
               value: parseFloat(value),
