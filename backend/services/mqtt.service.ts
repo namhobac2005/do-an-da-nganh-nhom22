@@ -13,17 +13,6 @@ const aioKey = process.env.AIO_KEY!;
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Danh sách feed key dùng chung cho toàn bộ service
-const FEEDS = [
-  'temperature',
-  'water-level',
-  'light',
-  'pump',
-  'fan',
-  'servo',
-  'brightness',
-];
-
 const client = mqtt.connect('mqtts://io.adafruit.com', {
   username: aioUsername,
   password: aioKey,
@@ -32,76 +21,44 @@ const client = mqtt.connect('mqtts://io.adafruit.com', {
 /**
  * KHỞI TẠO LẮNG NGHE MQTT (REAL-TIME)
  */
-export const initMQTT = () => {
-  client.on('connect', () => {
-    console.log('MQTT Connected to Adafruit IO!');
+export const initMQTT = async () => {
+  // Lấy danh sách feed_key từ cả 2 bảng
+  const { data: senKeys } = await supabase.from('sensors').select('feed_key');
+  const { data: actKeys } = await supabase.from('actuators').select('feed_key');
 
-    FEEDS.forEach((feed) => {
-      client.subscribe(`${aioUsername}/feeds/${feed}`);
+  const allKeys = [
+    ...(senKeys?.map((k) => k.feed_key) || []),
+    ...(actKeys?.map((k) => k.feed_key) || []),
+  ].filter(Boolean);
+
+  client.on('connect', () => {
+    console.log('✅ MQTT Connected!');
+    allKeys.forEach((key) => {
+      client.subscribe(`${aioUsername}/feeds/${key}`);
+      console.log(`📡 Đang theo dõi feed: ${key}`);
     });
   });
 
   client.on('message', async (topic, message) => {
-    const value = message.toString();
     const feedKey = topic.split('/').pop() || '';
+    const value = message.toString();
 
-    try {
-      // 1. Tìm Actuator - Dùng maybeSingle() để không bị văng lỗi nếu không có
-      const { data: actuator, error: actErr } = await supabase
-        .from('actuators')
-        .select('id, mode')
-        .eq('type', feedKey)
-        .maybeSingle(); // Trả về null nếu không tìm thấy, không báo lỗi
+    // TÌM THEO FEED_KEY
+    const { data: sensor } = await supabase
+      .from('sensors')
+      .select('id, pond_id')
+      .eq('feed_key', feedKey) // Thay vì .eq('type', ...)
+      .maybeSingle();
 
-      if (actuator) {
-        const newStatus =
-          value === '0' || value.toLowerCase() === 'off' ? 'OFF' : 'ON';
-
-        await supabase
-          .from('actuators')
-          .update({ status: newStatus })
-          .eq('id', actuator.id);
-
-        await supabase.from('actuator_logs').insert([
-          {
-            actuator_id: actuator.id,
-            action: `MQTT: ${value}`,
-            status: newStatus,
-            mode: actuator.mode || 'auto',
-          },
-        ]);
-        console.log(`[Actuator] ${feedKey} updated.`);
-        return;
-      }
-
-      // 2. Tìm Sensor - Tương tự dùng maybeSingle()
-      const { data: sensor, error: senErr } = await supabase
-        .from('sensors')
-        .select('id')
-        .eq('type', feedKey)
-        .maybeSingle();
-
-      if (sensor) {
-        await supabase.from('sensor_data').insert([
-          {
-            sensor_id: sensor.id,
-            value: parseFloat(value),
-          },
-        ]);
-        console.log(`[Sensor] ${feedKey} recorded.`);
-      } else {
-        // Nếu Adafruit bắn về mà DB không có, chỉ log ra để biết chứ không dừng app
-        console.log(
-          `ℹFeed [${feedKey}] nhận dữ liệu nhưng không có ID tương ứng trong DB.`,
-        );
-      }
-    } catch (err: any) {
-      console.error('Lỗi logic MQTT:', err.message);
+    if (sensor) {
+      await supabase
+        .from('sensor_data')
+        .insert([{ sensor_id: sensor.id, value: parseFloat(value) }]);
+      console.log(`✅ Đã lưu data cho hồ: ${sensor.pond_id}`);
+      return;
     }
-  });
 
-  client.on('error', (err) => {
-    console.error('Lỗi kết nối MQTT:', err);
+    // Tương tự cho Actuator...
   });
 };
 
@@ -109,176 +66,71 @@ export const initMQTT = () => {
  * ĐỒNG BỘ DỮ LIỆU CŨ/CÓ SẴN (HTTP API)
  */
 export const syncAllDataFromAdafruit = async () => {
-  console.log('Bắt đầu quét Adafruit để khởi tạo Database...');
+  // 1. Lấy tất cả cảm biến đã được gán vào hồ trong DB
+  const { data: dbSensors } = await supabase
+    .from('sensors')
+    .select('id, feed_key');
 
-  for (const feedKey of FEEDS) {
+  if (!dbSensors) return;
+
+  for (const sensor of dbSensors) {
     try {
-      // 1. Lấy dữ liệu cuối cùng từ Adafruit
       const response = await axios.get(
-        `https://io.adafruit.com/api/v2/${aioUsername}/feeds/${feedKey}/data/last`,
+        `https://io.adafruit.com/api/v2/${aioUsername}/feeds/${sensor.feed_key}/data/last`,
         { headers: { 'X-AIO-Key': aioKey } },
       );
 
       const lastValue = response.data.value;
-      const feedName = feedKey.charAt(0).toUpperCase() + feedKey.slice(1); // Tự tạo tên (VD: Temperature)
 
-      // 2. PHÂN LOẠI: Cái nào là Actuator (thiết bị), cái nào là Sensor (cảm biến)
-      const isActuator = ['light', 'pump', 'fan', 'servo'].includes(feedKey);
-
-      if (isActuator) {
-        // 1. Kiểm tra xem đã có trong DB chưa
-        let { data: actuator, error: fetchError } = await supabase
-          .from('actuators')
-          .select('id')
-          .eq('type', feedKey)
-          .maybeSingle();
-
-        const statusValue =
-          lastValue === '0' || lastValue.toLowerCase() === 'off' ? 'OFF' : 'ON';
-
-        if (!actuator) {
-          console.log(`Đang thử tạo mới Actuator: ${feedKey}`);
-
-          // 2. Thêm mới nếu chưa có
-          const { data: newAct, error: insertError } = await supabase
-            .from('actuators')
-            .insert([
-              {
-                name: feedName,
-                type: feedKey,
-                status: statusValue,
-                mode: 'manual',
-                // Tuyệt đối không điền pond_id ở đây nếu chưa có ao
-              },
-            ])
-            .select()
-            .single();
-
-          if (insertError) {
-            // ĐÂY LÀ DÒNG QUAN TRỌNG: Nó sẽ báo tại sao không ghi được
-            console.error(
-              `Lỗi Insert Actuator [${feedKey}]:`,
-              insertError.message,
-            );
-          } else {
-            console.log(`Đã tạo mới Actuator [${feedKey}] thành công!`);
-            actuator = newAct;
-          }
-        } else {
-          // 3. Nếu đã có thì cập nhật trạng thái
-          const { error: updateError } = await supabase
-            .from('actuators')
-            .update({ status: statusValue })
-            .eq('id', actuator.id);
-
-          if (updateError)
-            console.error(
-              `Lỗi Update Actuator [${feedKey}]:`,
-              updateError.message,
-            );
-          else
-            console.log(
-              `Đã cập nhật trạng thái Actuator [${feedKey}] -> ${statusValue}`,
-            );
-        }
-
-        // 4. Ghi log (Chỉ ghi nếu có actuator ID)
-        if (actuator) {
-          const { error: logError } = await supabase
-            .from('actuator_logs')
-            .insert([
-              {
-                actuator_id: actuator.id,
-                action: `Initial Sync: ${lastValue}`,
-                status: statusValue,
-                mode: 'manual',
-              },
-            ]);
-          if (logError)
-            console.error(`Lỗi Ghi Log [${feedKey}]:`, logError.message);
-        }
-      } else {
-        // LÀ CẢM BIẾN (Sensor)
-        let { data: sensor } = await supabase
-          .from('sensors')
-          .select('id')
-          .eq('type', feedKey)
-          .maybeSingle();
-
-        if (!sensor) {
-          console.log(`Tạo mới Sensor: ${feedKey}`);
-          const { data: newSen, error } = await supabase
-            .from('sensors')
-            .insert([
-              {
-                name: feedName,
-                type: feedKey,
-                status: 'active',
-                unit: feedKey === 'temperature' ? '°C' : '%',
-              },
-            ])
-            .select()
-            .single();
-          sensor = newSen;
-        }
-
-        // Sau khi đã có Sensor ID (dù mới tạo hay đã có), ghi dữ liệu vào sensor_data
-        if (sensor && lastValue !== undefined) {
-          await supabase.from('sensor_data').insert([
-            {
-              sensor_id: sensor.id,
-              value: parseFloat(lastValue),
-            },
-          ]);
-          console.log(`Đã ghi dữ liệu cho ${feedKey}: ${lastValue}`);
-        }
-      }
-    } catch (err: any) {
-      if (err.response?.status !== 404) {
-        console.error(`Lỗi đồng bộ feed [${feedKey}]:`, err.message);
-      }
+      await supabase
+        .from('sensor_data')
+        .insert([{ sensor_id: sensor.id, value: parseFloat(lastValue) }]);
+      console.log(
+        `🔄 Đã đồng bộ feed ${sensor.feed_key} cho sensor ${sensor.id}`,
+      );
+    } catch (err) {
+      console.error(`❌ Lỗi đồng bộ feed ${sensor.feed_key}`);
     }
   }
-  console.log('Hệ thống đã sẵn sàng với dữ liệu từ Adafruit!');
 };
 
-export const startSensorPolling = () => {
-  setInterval(async () => {
-    for (const feedKey of FEEDS) {
-      try {
-        const res = await axios.get(
-          `https://io.adafruit.com/api/v2/${aioUsername}/feeds/${feedKey}/data/last`,
-          { headers: { 'X-AIO-Key': aioKey } },
-        );
+// export const startSensorPolling = () => {
+//   setInterval(async () => {
+//     for (const feedKey of FEEDS) {
+//       try {
+//         const res = await axios.get(
+//           `https://io.adafruit.com/api/v2/${aioUsername}/feeds/${feedKey}/data/last`,
+//           { headers: { 'X-AIO-Key': aioKey } },
+//         );
 
-        const value = res.data.value;
+//         const value = res.data.value;
 
-        // chỉ xử lý sensor
-        const isSensor = ['temperature', 'water-level', 'brightness'].includes(
-          feedKey,
-        );
+//         // chỉ xử lý sensor
+//         const isSensor = ['temperature', 'water-level', 'brightness'].includes(
+//           feedKey,
+//         );
 
-        if (!isSensor) continue;
+//         if (!isSensor) continue;
 
-        const { data: sensor } = await supabase
-          .from('sensors')
-          .select('id')
-          .eq('type', feedKey)
-          .maybeSingle();
+//         const { data: sensor } = await supabase
+//           .from('sensors')
+//           .select('id')
+//           .eq('type', feedKey)
+//           .maybeSingle();
 
-        if (sensor) {
-          await supabase.from('sensor_data').insert([
-            {
-              sensor_id: sensor.id,
-              value: parseFloat(value),
-            },
-          ]);
+//         if (sensor) {
+//           await supabase.from('sensor_data').insert([
+//             {
+//               sensor_id: sensor.id,
+//               value: parseFloat(value),
+//             },
+//           ]);
 
-          console.log(`[Polling] ${feedKey}: ${value}`);
-        }
-      } catch (err: any) {
-        console.error(`Polling lỗi ${feedKey}:`, err.message);
-      }
-    }
-  }, 5000); // 5 giây
-};
+//           console.log(`[Polling] ${feedKey}: ${value}`);
+//         }
+//       } catch (err: any) {
+//         console.error(`Polling lỗi ${feedKey}:`, err.message);
+//       }
+//     }
+//   }, 5000); // 5 giây
+// };
