@@ -1,25 +1,23 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Khởi tạo Supabase client (Ép kiểu string để TS không báo lỗi thiếu biến môi trường)
 const supabaseUrl = process.env.SUPABASE_URL as string;
 const supabaseKey = process.env.SUPABASE_KEY as string;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Cấu hình Adafruit IO
-const AIO_USERNAME = process.env.AIO_USERNAME;
-const AIO_KEY = process.env.AIO_KEY;
-const AIO_BASE_URL = `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds`;
+// Lấy lịch sử dữ liệu của các sensor thuộc một Pond cụ thể
+export const getSensorHistoryByPond = async (pondId: string, limit: number) => {
+  if (!pondId || pondId === 'all') return [];
 
-export const getSensorHistory = async (limit: number) => {
   const { data, error } = await supabase
     .from('sensor_data')
     .select(
       `
       value,
       timestamp,
-      sensors ( type )
+      sensors!inner ( type, pond_id )
     `,
     )
+    .eq('sensors.pond_id', pondId) // Lọc đúng hồ
     .order('timestamp', { ascending: false })
     .limit(limit);
 
@@ -27,44 +25,47 @@ export const getSensorHistory = async (limit: number) => {
   return data;
 };
 
-/**
- * Logic: Lấy tất cả sensor, mỗi sensor lấy kèm 1 bản ghi mới nhất từ sensor_data
- */
-export const getAllSensorsWithLastValue = async () => {
+// Lấy giá trị mới nhất của các sensor thuộc một Pond cụ thể
+export const getLatestSensorsByPond = async (pondId: string) => {
+  if (!pondId || pondId === 'all') return [];
+
   const { data, error } = await supabase
     .from('sensors')
     .select(
       `
-      id,
-      name,
-      type,
-      unit,
-      status,
-      sensor_data (
-        value,
-        timestamp
-      )
+      id, name, type, unit, status,
+      sensor_data ( value, timestamp )
     `,
     )
-    // Sắp xếp sensor_data bên trong theo thời gian giảm dần
+    .eq('pond_id', pondId) // Lọc đúng hồ
     .order('timestamp', { foreignTable: 'sensor_data', ascending: false })
-    // Chỉ lấy 1 dòng sensor_data cho mỗi sensor
     .limit(1, { foreignTable: 'sensor_data' });
 
   if (error) throw error;
 
-  // Format lại dữ liệu cho Frontend dễ đọc: đưa 'value' ra ngoài cùng cấp
   return data.map((s) => ({
     id: s.id,
     name: s.name,
     type: s.type,
     unit: s.unit,
     status: s.status,
-    value:
-      s.sensor_data && s.sensor_data.length > 0 ? s.sensor_data[0].value : 0,
-    updated_at:
-      s.sensor_data && s.sensor_data.length > 0
-        ? s.sensor_data[0].timestamp
-        : null,
+    value: s.sensor_data?.[0]?.value ?? 0,
+    updated_at: s.sensor_data?.[0]?.timestamp ?? null,
   }));
+};
+
+// Tạm
+export const getAllZones = async () => {
+  const { data, error } = await supabase.from('zones').select('id, name');
+  if (error) throw error;
+  return data;
+};
+
+export const getPondsByZone = async (zoneId: string) => {
+  const { data, error } = await supabase
+    .from('ponds')
+    .select('id, name')
+    .eq('zone_id', zoneId);
+  if (error) throw error;
+  return data;
 };

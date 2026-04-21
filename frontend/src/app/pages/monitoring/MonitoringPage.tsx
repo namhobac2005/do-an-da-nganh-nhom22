@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import axios from 'axios';
 import {
   LineChart,
   Line,
@@ -9,29 +10,22 @@ import {
   Legend,
   ResponsiveContainer,
   LabelList,
-  Area,
-  AreaChart,
 } from 'recharts';
 import {
   ThermometerSun,
   Waves,
   Sun,
+  MapPin,
+  Fish,
+  Activity,
   RefreshCw,
   Wifi,
-  Activity,
 } from 'lucide-react';
-import * as sensorService from '../../services/sensorService';
 
-const SENSOR_META: Record<
-  string,
-  {
-    label: string;
-    color: string;
-    icon: React.ReactNode;
-    unit: string;
-    yAxisId: string;
-  }
-> = {
+// Cấu hình Base URL của Backend
+const API_BASE_URL = 'http://localhost:5000/sensors';
+
+const SENSOR_META: Record<string, any> = {
   temperature: {
     label: 'Nhiệt độ',
     color: '#f97316',
@@ -56,248 +50,317 @@ const SENSOR_META: Record<
 };
 
 export const MonitoringPage: React.FC = () => {
-  const [sensors, setSensors] = useState<sensorService.SensorData[]>([]);
-  const [history, setHistory] = useState<sensorService.HistoryRecord[]>([]);
-  const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [dbZones, setDbZones] = useState<any[]>([]);
+  const [dbPonds, setDbPonds] = useState<any[]>([]);
+  const [selectedZone, setSelectedZone] = useState<string>('');
+  const [selectedPond, setSelectedPond] = useState<string>('');
+
+  const [sensors, setSensors] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const loadAllData = async () => {
-    setIsLoading(true);
-    const [latest, hist] = await Promise.all([
-      sensorService.getLatestSensors(),
-      sensorService.getSensorHistory(30),
-    ]);
-    setSensors(latest.filter((s) => SENSOR_META[s.type]));
-    setHistory(hist);
-    setLastUpdated(new Date());
-    setIsLoading(false);
-  };
-
+  // 1. Lấy danh sách Vùng nuôi khi load trang
   useEffect(() => {
-    loadAllData();
-    const timer = setInterval(loadAllData, 5000);
-    return () => clearInterval(timer);
+    const fetchZones = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/zones`);
+        // SẮP XẾP Ở FRONTEND THEO TÊN (A-Z)
+        const sortedZones = (res.data || []).sort((a: any, b: any) =>
+          a.name.localeCompare(b.name, 'vi', { sensitivity: 'base' }),
+        );
+        setDbZones(sortedZones);
+      } catch (err) {
+        console.error('Lỗi lấy Zone:', err);
+      }
+    };
+    fetchZones();
   }, []);
 
+  // 2. Lấy danh sách Ao khi chọn Vùng
+  useEffect(() => {
+    const fetchPonds = async () => {
+      if (!selectedZone) {
+        setDbPonds([]);
+        return;
+      }
+      try {
+        const res = await axios.get(
+          `${API_BASE_URL}/zones/${selectedZone}/ponds`,
+        );
+        // SẮP XẾP AO THEO TÊN (A-Z)
+        const sortedPonds = (res.data || []).sort((a: any, b: any) =>
+          a.name.localeCompare(b.name, 'vi', { sensitivity: 'base' }),
+        );
+        setDbPonds(sortedPonds);
+      } catch (err) {
+        console.error('Lỗi lấy Pond:', err);
+      }
+    };
+    fetchPonds();
+  }, [selectedZone]);
+
+  // 3. Hàm fetch dữ liệu cảm biến (Latest & History)
+  const loadMonitoringData = async () => {
+    if (!selectedPond) return;
+    setIsLoading(true);
+    try {
+      const [resLatest, resHistory] = await Promise.all([
+        axios.get(`${API_BASE_URL}/latest`, {
+          params: { pondId: selectedPond },
+        }),
+        axios.get(`${API_BASE_URL}/history`, {
+          params: { pondId: selectedPond, limit: 50 },
+        }),
+      ]);
+      setSensors(resLatest.data || []);
+      setHistory(resHistory.data || []);
+    } catch (err) {
+      console.error('Lỗi load dữ liệu giám sát:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Tự động reload sau mỗi 10 giây
+  useEffect(() => {
+    loadMonitoringData();
+    const interval = setInterval(loadMonitoringData, 10000);
+    return () => clearInterval(interval);
+  }, [selectedPond]);
+
+  // 4. Xử lý dữ liệu hội tụ cho biểu đồ
   const chartData = useMemo(() => {
     const groups: Record<string, any> = {};
-    const reversedHistory = [...history].reverse();
-    if (reversedHistory.length === 0) return [];
 
-    reversedHistory.forEach((item, index) => {
-      const timeStr = new Date(item.timestamp).toLocaleTimeString('vi-VN', {
+    if (!history || history.length === 0) return [];
+
+    history.forEach((item: any) => {
+      // 1. CHUYỂN TIMESTAMP VỀ CHUỖI HIỂN THỊ ĐỒNG NHẤT (Ví dụ: "22:05:01")
+      // Dùng cái này làm KEY để các cảm biến "nhập" vào chung 1 cột dọc
+      const timeDisplay = new Date(item.timestamp).toLocaleTimeString('vi-VN', {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
       });
-      if (!groups[timeStr]) groups[timeStr] = { time: timeStr };
+
+      // Nếu chưa có mốc thời gian này trong groups thì tạo mới
+      if (!groups[timeDisplay]) {
+        groups[timeDisplay] = {
+          time: timeDisplay,
+          fullTimestamp: new Date(item.timestamp).getTime(), // Dùng để sắp xếp chuẩn
+        };
+      }
+
       const type = item.sensors?.type;
       if (type && SENSOR_META[type]) {
-        groups[timeStr][SENSOR_META[type].label] = item.value;
-        if (index === reversedHistory.length - 1) {
-          groups[timeStr][`${SENSOR_META[type].label}_isLast`] = true;
-        }
+        // Đưa giá trị của sensor vào đúng nhãn (Nhiệt độ, Mực nước,...) của mốc thời gian đó
+        groups[timeDisplay][SENSOR_META[type].label] = item.value;
       }
     });
-    return Object.values(groups);
+
+    // 2. Chuyển từ Object sang Array và SORT theo thời gian thực tế (tránh biểu đồ nhảy lộn xộn)
+    const sortedData = Object.values(groups).sort(
+      (a: any, b: any) => a.fullTimestamp - b.fullTimestamp,
+    );
+
+    return sortedData;
   }, [history]);
 
-  const renderCustomizedLabel = (props: any) => {
-    const { x, y, value, index, data, dataKey } = props;
-    if (!data || !data[index] || !data[index][`${dataKey}_isLast`]) return null;
-    return (
-      <g>
-        <rect
-          x={x - 15}
-          y={y - 28}
-          width={30}
-          height={18}
-          rx={4}
-          fill="white"
-          stroke="#e2e8f0"
-          strokeWidth={1}
-        />
-        <text
-          x={x}
-          y={y}
-          dy={-15}
-          fill="#1e293b"
-          fontSize={11}
-          fontWeight="bold"
-          textAnchor="middle"
-        >
-          {value}
-        </text>
-      </g>
-    );
-  };
-
   return (
-    <div className="p-4 space-y-6 bg-gray-50/50 min-h-screen">
-      {/* Top Bar */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <Wifi size={20} className="text-emerald-500 animate-pulse" />
-          <h1 className="text-base font-bold text-gray-800 tracking-tight">
-            Hệ Thống Giám Sát Real-time
-          </h1>
+    <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
+      {/* THANH CHỌN KHU VỰC */}
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex-1 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-3">
+          <MapPin className="text-slate-400" size={20} />
+          <select
+            className="w-full bg-transparent font-semibold text-slate-700 outline-none"
+            value={selectedZone}
+            onChange={(e) => {
+              setSelectedZone(e.target.value);
+              setSelectedPond('');
+            }}
+          >
+            <option value="">-- Chọn Vùng Nuôi --</option>
+            {dbZones.map((z) => (
+              <option key={z.id} value={z.id}>
+                {z.name}
+              </option>
+            ))}
+          </select>
         </div>
-        <button
-          onClick={loadAllData}
-          className="p-2 hover:bg-gray-100 rounded-xl transition-all"
-        >
-          <RefreshCw
-            size={18}
-            className={`${isLoading ? 'animate-spin' : ''} text-gray-500`}
-          />
-        </button>
+
+        <div className="flex-1 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-3">
+          <Fish className="text-slate-400" size={20} />
+          <select
+            className="w-full bg-transparent font-semibold text-slate-700 outline-none"
+            disabled={!selectedZone}
+            value={selectedPond}
+            onChange={(e) => setSelectedPond(e.target.value)}
+          >
+            <option value="">-- Chọn Ao Nuôi --</option>
+            {dbPonds.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {/* Sensor Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {Object.keys(SENSOR_META).map((type) => {
-          const sensorData = sensors.find((s) => s.type === type);
-          const meta = SENSOR_META[type];
-          return (
-            <div
-              key={type}
-              className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm"
-            >
-              <div className="flex items-center gap-3 mb-4">
+      {!selectedPond ? (
+        /* TRẠNG THÁI TRỐNG */
+        <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border-2 border-dashed border-slate-200 text-slate-400">
+          <Activity size={64} className="mb-4 opacity-20" />
+          <h3 className="text-xl font-bold text-slate-500">
+            Hệ thống giám sát thực tế
+          </h3>
+          <p>Vui lòng chọn Vùng và Ao để kết nối dữ liệu từ thiết bị.</p>
+        </div>
+      ) : (
+        /* TRẠNG THÁI CÓ DỮ LIỆU */
+        <div className="space-y-6 animate-in fade-in duration-700">
+          {/* CÁC THẺ SENSOR (CARDS) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {Object.keys(SENSOR_META).map((type) => {
+              const sensorData = sensors.find((s) => s.type === type);
+              const meta = SENSOR_META[type];
+              return (
                 <div
-                  className="p-2 rounded-lg"
-                  style={{
-                    backgroundColor: `${meta.color}15`,
-                    color: meta.color,
-                  }}
+                  key={type}
+                  className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow"
                 >
-                  {meta.icon}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="p-2 rounded-lg"
+                        style={{
+                          backgroundColor: `${meta.color}15`,
+                          color: meta.color,
+                        }}
+                      >
+                        {meta.icon}
+                      </div>
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        {meta.label}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl font-black text-slate-800">
+                      {sensorData?.value ?? '--'}
+                    </span>
+                    <span className="text-slate-400 font-bold">
+                      {meta.unit}
+                    </span>
+                  </div>
                 </div>
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                  {meta.label}
-                </span>
+              );
+            })}
+          </div>
+
+          {/* BIỂU ĐỒ DIỄN BIẾN (CHART) */}
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  Diễn biến môi trường hồ nuôi
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Dữ liệu được thu thập từ các trạm cảm biến IoT
+                </p>
               </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-black text-gray-800">
-                  {sensorData?.value ?? '--'}
-                </span>
-                <span className="text-gray-400 font-bold text-sm">
-                  {meta.unit}
+              <div className="flex gap-2">
+                <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-bold uppercase">
+                  Real-time
                 </span>
               </div>
             </div>
-          );
-        })}
-      </div>
 
-      {/* Chart Section */}
-      <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-        <div className="flex items-center gap-2 mb-6">
-          <Activity size={18} className="text-blue-500" />
-          <h2 className="text-sm font-bold text-gray-700 uppercase tracking-tight">
-            Biểu đồ lịch sử chi tiết
-          </h2>
-        </div>
-
-        <div className="h-[400px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={chartData}
-              margin={{ top: 30, right: 40, left: 10, bottom: 10 }}
-            >
-              {/* Guild: Tăng độ đậm của lưới (strokeOpacity) và dùng màu xám đậm hơn (#cbd5e1) */}
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#cbd5e1"
-                vertical={true}
-                strokeOpacity={0.5}
-              />
-
-              <XAxis
-                dataKey="time"
-                tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }}
-                axisLine={{ stroke: '#94a3b8' }}
-                tickLine={true}
-              />
-
-              {/* Trục Y trái: Nhiệt độ (Màu cam đậm) */}
-              <YAxis
-                yAxisId="left"
-                orientation="left"
-                unit="°C"
-                tick={{ fontSize: 10, fill: '#f97316', fontWeight: 700 }}
-                axisLine={{ stroke: '#f97316' }}
-              />
-
-              {/* Trục Y phải: % (Màu xanh đậm) */}
-              <YAxis
-                yAxisId="right"
-                orientation="right"
-                unit="%"
-                tick={{ fontSize: 10, fill: '#2563eb', fontWeight: 700 }}
-                axisLine={{ stroke: '#2563eb' }}
-              />
-
-              <Tooltip
-                contentStyle={{
-                  borderRadius: '12px',
-                  border: '1px solid #e2e8f0',
-                  boxShadow: '0 10px 15px rgba(0,0,0,0.1)',
-                }}
-              />
-
-              <Legend
-                iconType="circle"
-                wrapperStyle={{
-                  fontSize: '12px',
-                  paddingTop: '20px',
-                  fontWeight: 600,
-                }}
-              />
-
-              {Object.entries(SENSOR_META).map(([key, m]) => (
-                <Line
-                  key={m.label}
-                  yAxisId={m.yAxisId}
-                  type="monotone"
-                  dataKey={m.label}
-                  stroke={m.color}
-                  strokeWidth={4} // Tăng độ đậm đường Line lên 4 (rất rõ)
-                  connectNulls={true}
-                  animationDuration={500}
-                  // FIX LỖI DOT: Kiểm tra chính xác điểm cuối cho từng đường
-                  dot={(props: any) => {
-                    const { cx, cy, index, dataKey } = props;
-                    // Kiểm tra flag isLast dựa trên dataKey tương ứng
-                    const isLast =
-                      chartData[index] && chartData[index][`${dataKey}_isLast`];
-
-                    return (
-                      <circle
-                        key={`${dataKey}-dot-${index}`}
-                        cx={cx}
-                        cy={cy}
-                        r={isLast ? 6 : 3.5}
-                        fill={isLast ? m.color : '#fff'}
-                        stroke={m.color}
-                        strokeWidth={isLast ? 0 : 2.5} // Điểm thường có viền đậm, điểm cuối fill đặc
-                      />
-                    );
-                  }}
-                  activeDot={{ r: 8, strokeWidth: 0 }}
+            <div className="h-[400px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={chartData}
+                  margin={{ top: 10, right: 30, left: 20, bottom: 5 }}
                 >
-                  <LabelList
-                    dataKey={m.label}
-                    content={(p) =>
-                      renderCustomizedLabel({ ...p, data: chartData })
-                    }
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    vertical={false}
+                    stroke="#f1f5f9"
                   />
-                </Line>
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
+
+                  <XAxis
+                    dataKey="time"
+                    tick={{ fontSize: 11, fill: '#94a3b8' }}
+                    axisLine={{ stroke: '#cbd5e1', strokeWidth: 1 }} // Đường ngang ở dưới
+                    tickLine={false}
+                    minTickGap={15}
+                    type="category"
+                    boundaryGap={false}
+                    padding={{ left: 0, right: 0 }}
+                  />
+
+                  {/* Trục Y trái: Có đường kẻ dọc màu Cam */}
+                  <YAxis
+                    yAxisId="left"
+                    tick={{ fontSize: 12, fill: '#f97316', fontWeight: 'bold' }}
+                    unit="°C"
+                    axisLine={{ stroke: '#f97316', strokeWidth: 2 }} // ĐƯỜNG KẺ DỌC MÀU CAM
+                    tickLine={true}
+                    padding={{ top: 20, bottom: 5 }}
+                  />
+
+                  {/* Trục Y phải: Có đường kẻ dọc màu Xanh */}
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fontSize: 12, fill: '#3b82f6', fontWeight: 'bold' }}
+                    unit="%"
+                    axisLine={{ stroke: '#3b82f6', strokeWidth: 2 }} // ĐƯỜNG KẺ DỌC MÀU XANH
+                    tickLine={true}
+                    padding={{ top: 20, bottom: 5 }}
+                  />
+
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: '16px',
+                      border: 'none',
+                      boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                    }}
+                  />
+
+                  <Legend
+                    iconType="circle"
+                    wrapperStyle={{
+                      paddingTop: '30px',
+                      fontSize: '13px',
+                      fontWeight: 'bold',
+                    }}
+                  />
+
+                  {Object.entries(SENSOR_META).map(([key, meta]) => (
+                    <Line
+                      key={key}
+                      yAxisId={meta.yAxisId}
+                      type="monotone"
+                      dataKey={meta.label}
+                      stroke={meta.color}
+                      strokeWidth={4}
+                      dot={{
+                        r: 5,
+                        fill: '#fff',
+                        stroke: meta.color,
+                        strokeWidth: 3,
+                      }}
+                      activeDot={{ r: 8, fill: meta.color, strokeWidth: 0 }}
+                      connectNulls={true}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
