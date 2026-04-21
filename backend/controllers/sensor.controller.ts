@@ -1,40 +1,46 @@
 import { Request, Response } from 'express';
 import * as sensorService from '../services/sensor.service.js';
 
-/**
- * Lấy lịch sử 30 bản ghi gần nhất cho Biểu đồ (Chart)
- */
-export const getHistory = async (req: Request, res: Response) => {
+// 1. Lấy tất cả Vùng nuôi (Zone)
+export const getAllZones = async (req: Request, res: Response) => {
   try {
-    const limit = req.query.limit ? parseInt(req.query.limit as string) : 30;
-    const data = await sensorService.getSensorHistory(limit);
-
+    const data = await sensorService.getAllZones();
     return res.status(200).json(data);
   } catch (error: any) {
-    console.error('🔥 Error in getHistory:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Không thể lấy lịch sử cảm biến',
-      error: error.message,
-    });
+    return res.status(500).json({ success: false, error: error.message });
   }
 };
 
-/**
- * Lấy danh sách tất cả sensors kèm giá trị mới nhất cho các Cards
- */
-export const getAllLatest = async (req: Request, res: Response) => {
+// 2. Lấy danh sách Ao (Pond) theo Zone
+export const getPondsByZone = async (req: Request, res: Response) => {
   try {
-    // 1. Gọi service để lấy list sensors + last value
-    const sensors = await sensorService.getAllSensorsWithLastValue();
-
-    return res.status(200).json(sensors);
+    const { zoneId } = req.params;
+    const data = await sensorService.getPondsByZone(zoneId);
+    return res.status(200).json(data);
   } catch (error: any) {
-    console.error('🔥 Error in getAllLatest:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Không thể lấy trạng thái cảm biến hiện tại',
-      error: error.message,
-    });
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// 3. Lấy giá trị mới nhất (Cards) theo Pond cụ thể
+export const getLatestByPond = async (req: Request, res: Response) => {
+  try {
+    const pondId = req.query.pondId as string;
+    const data = await sensorService.getLatestSensorsByPond(pondId);
+    return res.status(200).json(data);
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// 4. Lấy lịch sử (Chart) theo Pond cụ thể
+export const getHistoryByPond = async (req: Request, res: Response) => {
+  try {
+    const pondId = req.query.pondId as string;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 30;
+    const data = await sensorService.getSensorHistoryByPond(pondId, limit);
+    return res.status(200).json(data);
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
   }
 };

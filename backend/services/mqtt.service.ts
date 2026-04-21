@@ -54,7 +54,6 @@ export const initMQTT = async () => {
       await supabase
         .from('sensor_data')
         .insert([{ sensor_id: sensor.id, value: parseFloat(value) }]);
-      console.log(`✅ Đã lưu data cho hồ: ${sensor.pond_id}`);
       return;
     }
 
@@ -66,12 +65,30 @@ export const initMQTT = async () => {
  * ĐỒNG BỘ DỮ LIỆU CŨ/CÓ SẴN (HTTP API)
  */
 export const syncAllDataFromAdafruit = async () => {
-  // 1. Lấy tất cả cảm biến đã được gán vào hồ trong DB
+  // 1. Lấy tất cả cảm biến (nên filter thêm để tránh lấy null feed_key)
   const { data: dbSensors } = await supabase
     .from('sensors')
-    .select('id, feed_key');
+    .select('id, feed_key')
+    .not('feed_key', 'is', null);
 
-  if (!dbSensors) return;
+  if (!dbSensors || dbSensors.length === 0) return;
+
+  // 2. TẠO MỐC THỜI GIAN HỘI TỤ (Giờ VN)
+  // Lấy giờ hiện tại, làm tròn giây để 3 sensor khớp nhau trên biểu đồ
+  const now = new Date();
+  now.setMilliseconds(0);
+
+  // Chuyển sang chuỗi ISO khớp với múi giờ VN (+7) để lưu vào DB
+  const vnTimestamp = new Date(
+    now.getTime() + 7 * 60 * 60 * 1000,
+  ).toISOString();
+
+  // Dùng để log ra console cho dễ nhìn
+  const displayTime = now.toLocaleTimeString('vi-VN');
+
+  console.log(`🔄 Bắt đầu đồng bộ toàn hệ thống lúc: ${displayTime}`);
+
+  const dataToInsert = [];
 
   for (const sensor of dbSensors) {
     try {
@@ -80,57 +97,28 @@ export const syncAllDataFromAdafruit = async () => {
         { headers: { 'X-AIO-Key': aioKey } },
       );
 
-      const lastValue = response.data.value;
+      if (response.data && response.data.value !== undefined) {
+        dataToInsert.push({
+          sensor_id: sensor.id,
+          value: parseFloat(response.data.value),
+          timestamp: vnTimestamp, // TẤT CẢ SENSOR DÙNG CHUNG 1 TIMESTAMP NÀY
+        });
+      }
+    } catch (err: any) {
+      console.error(`❌ Lỗi feed ${sensor.feed_key}: ${err.message}`);
+    }
+  }
 
-      await supabase
-        .from('sensor_data')
-        .insert([{ sensor_id: sensor.id, value: parseFloat(lastValue) }]);
+  // 3. Insert hàng loạt (Bulk Insert) để tối ưu và đảm bảo tính đồng nhất
+  if (dataToInsert.length > 0) {
+    const { error } = await supabase.from('sensor_data').insert(dataToInsert);
+
+    if (error) {
+      console.error('❌ Lỗi lưu dữ liệu đồng bộ:', error.message);
+    } else {
       console.log(
-        `🔄 Đã đồng bộ feed ${sensor.feed_key} cho sensor ${sensor.id}`,
+        `✅ Thành công! Đã gộp ${dataToInsert.length} sensor vào mốc ${displayTime}`,
       );
-    } catch (err) {
-      console.error(`❌ Lỗi đồng bộ feed ${sensor.feed_key}`);
     }
   }
 };
-
-// export const startSensorPolling = () => {
-//   setInterval(async () => {
-//     for (const feedKey of FEEDS) {
-//       try {
-//         const res = await axios.get(
-//           `https://io.adafruit.com/api/v2/${aioUsername}/feeds/${feedKey}/data/last`,
-//           { headers: { 'X-AIO-Key': aioKey } },
-//         );
-
-//         const value = res.data.value;
-
-//         // chỉ xử lý sensor
-//         const isSensor = ['temperature', 'water-level', 'brightness'].includes(
-//           feedKey,
-//         );
-
-//         if (!isSensor) continue;
-
-//         const { data: sensor } = await supabase
-//           .from('sensors')
-//           .select('id')
-//           .eq('type', feedKey)
-//           .maybeSingle();
-
-//         if (sensor) {
-//           await supabase.from('sensor_data').insert([
-//             {
-//               sensor_id: sensor.id,
-//               value: parseFloat(value),
-//             },
-//           ]);
-
-//           console.log(`[Polling] ${feedKey}: ${value}`);
-//         }
-//       } catch (err: any) {
-//         console.error(`Polling lỗi ${feedKey}:`, err.message);
-//       }
-//     }
-//   }, 5000); // 5 giây
-// };

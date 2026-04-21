@@ -3,10 +3,12 @@ import * as sensorController from '../controllers/sensor.controller.js';
 
 const router = Router();
 
-// Route cho Cards (Giá trị hiện tại)
-router.get('/', sensorController.getAllLatest);
+// Route lấy Metadata
+router.get('/zones', sensorController.getAllZones);
+router.get('/zones/:zoneId/ponds', sensorController.getPondsByZone);
 
-// Route cho Chart (Lịch sử)
-router.get('/history', sensorController.getHistory);
+// Route lấy Data cảm biến (Truyền ?pondId=... qua query)
+router.get('/latest', sensorController.getLatestByPond);
+router.get('/history', sensorController.getHistoryByPond);
 
 export default router;
