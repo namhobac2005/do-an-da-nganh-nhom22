@@ -131,37 +131,43 @@ export const MonitoringPage: React.FC = () => {
   // 4. Xử lý dữ liệu hội tụ cho biểu đồ
   const chartData = useMemo(() => {
     const groups: Record<string, any> = {};
-
     if (!history || history.length === 0) return [];
 
+    // 1. Gộp nhóm theo Time như cũ
     history.forEach((item: any) => {
-      // 1. CHUYỂN TIMESTAMP VỀ CHUỖI HIỂN THỊ ĐỒNG NHẤT (Ví dụ: "22:05:01")
-      // Dùng cái này làm KEY để các cảm biến "nhập" vào chung 1 cột dọc
       const timeDisplay = new Date(item.timestamp).toLocaleTimeString('vi-VN', {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
       });
 
-      // Nếu chưa có mốc thời gian này trong groups thì tạo mới
       if (!groups[timeDisplay]) {
         groups[timeDisplay] = {
           time: timeDisplay,
-          fullTimestamp: new Date(item.timestamp).getTime(), // Dùng để sắp xếp chuẩn
+          fullTimestamp: new Date(item.timestamp).getTime(),
         };
       }
 
       const type = item.sensors?.type;
       if (type && SENSOR_META[type]) {
-        // Đưa giá trị của sensor vào đúng nhãn (Nhiệt độ, Mực nước,...) của mốc thời gian đó
         groups[timeDisplay][SENSOR_META[type].label] = item.value;
       }
     });
 
-    // 2. Chuyển từ Object sang Array và SORT theo thời gian thực tế (tránh biểu đồ nhảy lộn xộn)
-    const sortedData = Object.values(groups).sort(
+    // 2. Chuyển thành mảng và sắp xếp theo thời gian
+    let sortedData = Object.values(groups).sort(
       (a: any, b: any) => a.fullTimestamp - b.fullTimestamp,
     );
+
+    // 3. FIX: Tìm điểm đầu tiên mà cảm biến Nhiệt độ (trục bên trái) CÓ DỮ LIỆU
+    // Nếu điểm đầu tiên bị trống Nhiệt độ, nó sẽ cắt bỏ cho đến khi tìm thấy điểm có Nhiệt độ
+    const firstValidIndex = sortedData.findIndex(
+      (point) => point[SENSOR_META.temperature.label] !== undefined,
+    );
+
+    if (firstValidIndex !== -1) {
+      sortedData = sortedData.slice(firstValidIndex);
+    }
 
     return sortedData;
   }, [history]);
