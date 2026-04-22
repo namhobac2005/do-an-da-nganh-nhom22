@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
-import * as deviceService from '../services/device.service.ts'; // Import service của bạn
+import { Request, Response } from "express";
+import * as deviceService from "../services/device.service.ts"; // Import service của bạn
 
 // Định nghĩa lại kiểu cho Request vì mặc định Express không có thuộc tính `req.user`
 interface CustomRequest extends Request {
@@ -37,5 +37,18 @@ export const controlDevice = async (req: CustomRequest, res: Response) => {
     res.status(200).json(result);
   } catch (error: any) {
     res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+export const getDeviceLogs = async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit
+      ? parseInt(req.query.limit as string, 10)
+      : 50;
+    const actuatorId = req.query.actuatorId as string | undefined;
+    const logs = await deviceService.getDeviceLogs(limit, actuatorId);
+    res.status(200).json(logs);
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };

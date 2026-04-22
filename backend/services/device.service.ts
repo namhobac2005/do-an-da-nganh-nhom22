@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
-import axios from 'axios'; // Nhớ chạy: npm install axios @supabase/supabase-js
+import { createClient } from "@supabase/supabase-js";
+import axios from "axios"; // Nhớ chạy: npm install axios @supabase/supabase-js
 
 // Khởi tạo Supabase client (Ép kiểu string để TS không báo lỗi thiếu biến môi trường)
 const supabaseUrl = process.env.SUPABASE_URL as string;
@@ -16,7 +16,7 @@ const AIO_BASE_URL = `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds`;
  */
 export const getAllDevices = async () => {
   // Đổi từ 'ACTUATOR' thành 'actuators'
-  const { data, error } = await supabase.from('actuators').select('*');
+  const { data, error } = await supabase.from("actuators").select("*");
   if (error) throw new Error(error.message);
   return data;
 };
@@ -31,13 +31,13 @@ export const controlDevice = async (
 ) => {
   // 1. Lấy thông tin từ bảng 'actuators'
   const { data: device, error: fetchErr } = await supabase
-    .from('actuators')
-    .select('*')
-    .eq('id', deviceId) // Cột là 'id' chứ không phải 'DeviceID'
+    .from("actuators")
+    .select("*")
+    .eq("id", deviceId) // Cột là 'id' chứ không phải 'DeviceID'
     .single();
 
   if (fetchErr || !device)
-    throw new Error('Không tìm thấy thiết bị: ' + fetchErr?.message);
+    throw new Error("Không tìm thấy thiết bị: " + fetchErr?.message);
 
   const feedKey = device.type.toLowerCase();
 
@@ -49,32 +49,53 @@ export const controlDevice = async (
         value: level.toString(),
       },
       {
-        headers: { 'X-AIO-Key': AIO_KEY, 'Content-Type': 'application/json' },
+        headers: { "X-AIO-Key": AIO_KEY, "Content-Type": "application/json" },
       },
     );
   } catch (aioError: any) {
-    throw new Error('Adafruit IO Offline');
+    throw new Error("Adafruit IO Offline");
   }
 
   // 3. Cập nhật bảng 'actuators'
-  const newStatus = level > 0 ? 'ON' : 'OFF';
+  const newStatus = level > 0 ? "ON" : "OFF";
   const { error: updateErr } = await supabase
-    .from('actuators')
+    .from("actuators")
     .update({ status: newStatus }) // Cột 'status' viết thường
-    .eq('id', deviceId);
+    .eq("id", deviceId);
 
   if (updateErr) throw new Error(updateErr.message);
 
   // 4. Ghi log vào bảng 'actuator_logs' (Số nhiều)
-  await supabase.from('actuator_logs').insert([
+  await supabase.from("actuator_logs").insert([
     {
       actuator_id: deviceId, // Tên cột: actuator_id
-      action: level === 0 ? 'OFF' : `ON (Level ${level})`,
+      action: level === 0 ? "OFF" : `ON (Level ${level})`,
       mode: device.mode,
       status: newStatus,
       user_id: userId || null,
     },
   ]);
 
-  return { success: true, message: 'Thành công' };
+  return { success: true, message: "Thành công" };
+};
+
+export const getDeviceLogs = async (
+  limit: number = 50,
+  actuatorId?: string,
+) => {
+  let query = supabase
+    .from("actuator_logs")
+    .select(
+      "id, actuator_id, action, mode, status, user_id, created_at, actuators(name, type)",
+    )
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (actuatorId) {
+    query = query.eq("actuator_id", actuatorId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data;
 };
