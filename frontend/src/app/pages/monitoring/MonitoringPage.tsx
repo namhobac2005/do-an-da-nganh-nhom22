@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
+import { useSearchParams } from 'react-router'; // 1. IMPORT useSearchParams
 import {
   LineChart,
   Line,
@@ -9,7 +10,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  LabelList,
 } from 'recharts';
 import {
   ThermometerSun,
@@ -18,11 +18,8 @@ import {
   MapPin,
   Fish,
   Activity,
-  RefreshCw,
-  Wifi,
 } from 'lucide-react';
 
-// Cấu hình Base URL của Backend
 const API_BASE_URL = 'http://localhost:5000/sensors';
 
 const SENSOR_META: Record<string, any> = {
@@ -50,6 +47,11 @@ const SENSOR_META: Record<string, any> = {
 };
 
 export const MonitoringPage: React.FC = () => {
+  // 2. KHỞI TẠO useSearchParams
+  const [searchParams] = useSearchParams();
+  const urlZoneId = searchParams.get('zoneId');
+  const urlPondId = searchParams.get('pondId');
+
   const [dbZones, setDbZones] = useState<any[]>([]);
   const [dbPonds, setDbPonds] = useState<any[]>([]);
   const [selectedZone, setSelectedZone] = useState<string>('');
@@ -64,17 +66,21 @@ export const MonitoringPage: React.FC = () => {
     const fetchZones = async () => {
       try {
         const res = await axios.get(`${API_BASE_URL}/zones`);
-        // SẮP XẾP Ở FRONTEND THEO TÊN (A-Z)
         const sortedZones = (res.data || []).sort((a: any, b: any) =>
           a.name.localeCompare(b.name, 'vi', { sensitivity: 'base' }),
         );
         setDbZones(sortedZones);
+
+        // 3. TỰ ĐỘNG CHỌN VÙNG (Nếu có ID trên URL)
+        if (urlZoneId && sortedZones.some((z: any) => z.id === urlZoneId)) {
+          setSelectedZone(urlZoneId);
+        }
       } catch (err) {
         console.error('Lỗi lấy Zone:', err);
       }
     };
     fetchZones();
-  }, []);
+  }, [urlZoneId]); // Thêm urlZoneId vào dependency
 
   // 2. Lấy danh sách Ao khi chọn Vùng
   useEffect(() => {
@@ -87,17 +93,27 @@ export const MonitoringPage: React.FC = () => {
         const res = await axios.get(
           `${API_BASE_URL}/zones/${selectedZone}/ponds`,
         );
-        // SẮP XẾP AO THEO TÊN (A-Z)
         const sortedPonds = (res.data || []).sort((a: any, b: any) =>
           a.name.localeCompare(b.name, 'vi', { sensitivity: 'base' }),
         );
         setDbPonds(sortedPonds);
+
+        // 4. TỰ ĐỘNG CHỌN AO (Nếu có ID trên URL)
+        if (urlPondId && sortedPonds.some((p: any) => p.id === urlPondId)) {
+          setSelectedPond(urlPondId);
+        } else if (sortedPonds.length > 0 && urlZoneId) {
+          // Nếu từ Dashboard qua (chỉ có urlZoneId) mà chưa chọn Ao, ta tự động chọn Ao đầu tiên luôn cho nhanh
+          setSelectedPond(sortedPonds[0].id);
+        } else if (!urlPondId) {
+          // Reset pond nếu đổi zone bằng tay (không thông qua URL)
+          setSelectedPond('');
+        }
       } catch (err) {
         console.error('Lỗi lấy Pond:', err);
       }
     };
     fetchPonds();
-  }, [selectedZone]);
+  }, [selectedZone, urlPondId, urlZoneId]); // Thêm dependencies
 
   // 3. Hàm fetch dữ liệu cảm biến (Latest & History)
   const loadMonitoringData = async () => {
@@ -133,7 +149,6 @@ export const MonitoringPage: React.FC = () => {
     const groups: Record<string, any> = {};
     if (!history || history.length === 0) return [];
 
-    // 1. Gộp nhóm theo Time như cũ
     history.forEach((item: any) => {
       const timeDisplay = new Date(item.timestamp).toLocaleTimeString('vi-VN', {
         hour: '2-digit',
@@ -154,13 +169,10 @@ export const MonitoringPage: React.FC = () => {
       }
     });
 
-    // 2. Chuyển thành mảng và sắp xếp theo thời gian
     let sortedData = Object.values(groups).sort(
       (a: any, b: any) => a.fullTimestamp - b.fullTimestamp,
     );
 
-    // 3. FIX: Tìm điểm đầu tiên mà cảm biến Nhiệt độ (trục bên trái) CÓ DỮ LIỆU
-    // Nếu điểm đầu tiên bị trống Nhiệt độ, nó sẽ cắt bỏ cho đến khi tìm thấy điểm có Nhiệt độ
     const firstValidIndex = sortedData.findIndex(
       (point) => point[SENSOR_META.temperature.label] !== undefined,
     );
@@ -276,6 +288,11 @@ export const MonitoringPage: React.FC = () => {
                 </p>
               </div>
               <div className="flex gap-2">
+                {isLoading && (
+                  <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-full text-[10px] font-bold uppercase animate-pulse">
+                    Đang tải...
+                  </span>
+                )}
                 <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-bold uppercase">
                   Real-time
                 </span>
@@ -297,7 +314,7 @@ export const MonitoringPage: React.FC = () => {
                   <XAxis
                     dataKey="time"
                     tick={{ fontSize: 11, fill: '#94a3b8' }}
-                    axisLine={{ stroke: '#cbd5e1', strokeWidth: 1 }} // Đường ngang ở dưới
+                    axisLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
                     tickLine={false}
                     minTickGap={15}
                     type="category"
@@ -305,23 +322,21 @@ export const MonitoringPage: React.FC = () => {
                     padding={{ left: 0, right: 0 }}
                   />
 
-                  {/* Trục Y trái: Có đường kẻ dọc màu Cam */}
                   <YAxis
                     yAxisId="left"
                     tick={{ fontSize: 12, fill: '#f97316', fontWeight: 'bold' }}
                     unit="°C"
-                    axisLine={{ stroke: '#f97316', strokeWidth: 2 }} // ĐƯỜNG KẺ DỌC MÀU CAM
+                    axisLine={{ stroke: '#f97316', strokeWidth: 2 }}
                     tickLine={true}
                     padding={{ top: 20, bottom: 5 }}
                   />
 
-                  {/* Trục Y phải: Có đường kẻ dọc màu Xanh */}
                   <YAxis
                     yAxisId="right"
                     orientation="right"
                     tick={{ fontSize: 12, fill: '#3b82f6', fontWeight: 'bold' }}
                     unit="%"
-                    axisLine={{ stroke: '#3b82f6', strokeWidth: 2 }} // ĐƯỜNG KẺ DỌC MÀU XANH
+                    axisLine={{ stroke: '#3b82f6', strokeWidth: 2 }}
                     tickLine={true}
                     padding={{ top: 20, bottom: 5 }}
                   />
