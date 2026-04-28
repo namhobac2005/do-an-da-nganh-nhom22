@@ -1,24 +1,11 @@
 /**
  * Dashboard.tsx
- * Trang tổng quan hệ thống - hiển thị KPIs, biểu đồ cảm biến, và trạng thái thiết bị
+ * Hệ thống quản lý nuôi trồng thủy hải sản thông minh
  */
 
-import { useState } from 'react';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  PieChart,
-  Pie,
-  Cell,
-} from 'recharts';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import {
   Waves,
   Cpu,
@@ -32,65 +19,52 @@ import {
   Activity,
   ArrowUpRight,
   ArrowDownRight,
+  Settings,
+  ChevronLeft,
+  ChevronRight,
+  Sun,
+  MapPin,
+  Fish,
 } from 'lucide-react';
-import {
-  MOCK_ZONES,
-  MOCK_PONDS,
-  MOCK_DEVICES,
-  MOCK_SENSORS,
-  MOCK_ALERTS,
-  generateSensorHistory,
-} from '../../data/mockData';
 
-// ===== STAT CARD COMPONENT =====
+// Import các Service thực tế từ dự án của bạn
+import * as sensorService from '../../services/sensorService';
+import * as dashboardService from '../../services/dashboardService';
 
-interface StatCardProps {
-  title: string;
-  value: string | number;
-  subtitle: string;
-  icon: React.ReactNode;
-  color: string;
-  bgColor: string;
-  trend?: { value: number; isUp: boolean };
-}
-
-const StatCard: React.FC<StatCardProps> = ({ title, value, subtitle, icon, color, bgColor, trend }) => (
-  <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+// --- Thành phần: Thẻ chỉ số KPI (Hàng trên cùng) ---
+const StatCard = ({ title, value, subtitle, icon, color, bgColor }: any) => (
+  <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
     <div className="flex items-start justify-between">
       <div>
-        <p className="text-gray-500" style={{ fontSize: '13px', fontWeight: 500 }}>{title}</p>
-        <p className={`mt-1 ${color}`} style={{ fontSize: '28px', fontWeight: 700, lineHeight: 1.2 }}>
+        <p className="text-gray-500 text-[13px] font-medium">{title}</p>
+        <p className={`mt-1 ${color} text-[28px] font-bold leading-tight`}>
           {value}
         </p>
-        <p className="text-gray-400 mt-1" style={{ fontSize: '12px' }}>{subtitle}</p>
+        <p className="text-gray-400 mt-1 text-[12px]">{subtitle}</p>
       </div>
-      <div className={`w-12 h-12 ${bgColor} rounded-xl flex items-center justify-center ${color}`}>
+      <div
+        className={`w-12 h-12 ${bgColor} rounded-xl flex items-center justify-center ${color}`}
+      >
         {icon}
       </div>
     </div>
-    {trend && (
-      <div className={`flex items-center gap-1 mt-3 ${trend.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
-        {trend.isUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-        <span style={{ fontSize: '12px', fontWeight: 500 }}>{Math.abs(trend.value)}% so với hôm qua</span>
-      </div>
-    )}
   </div>
 );
 
-// ===== SENSOR STATUS CARD =====
-
-interface SensorStatusProps {
-  label: string;
-  value: number;
-  unit: string;
-  min: number;
-  max: number;
-  status: 'normal' | 'warning' | 'critical';
-  icon: React.ReactNode;
-}
-
-const SensorStatusCard: React.FC<SensorStatusProps> = ({ label, value, unit, min, max, status, icon }) => {
-  const percentage = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+// --- Thành phần: Thẻ trạng thái cảm biến (Dạng số, thay cho biểu đồ) ---
+const SensorStatusCard = ({
+  label,
+  value,
+  unit,
+  min,
+  max,
+  status,
+  icon,
+}: any) => {
+  const percentage = Math.min(
+    100,
+    Math.max(0, ((value - min) / (max - min)) * 100),
+  );
   const statusColors = {
     normal: 'text-emerald-600',
     warning: 'text-amber-600',
@@ -108,350 +82,495 @@ const SensorStatusCard: React.FC<SensorStatusProps> = ({ label, value, unit, min
   };
 
   return (
-    <div className={`rounded-xl p-4 border ${bgColors[status]}`}>
+    <div
+      className={`rounded-xl p-4 border ${bgColors[status as keyof typeof bgColors] || bgColors.normal}`}
+    >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <span className={statusColors[status]}>{icon}</span>
-          <span className="text-gray-700" style={{ fontSize: '13px', fontWeight: 500 }}>{label}</span>
+          <span
+            className={
+              statusColors[status as keyof typeof statusColors] ||
+              statusColors.normal
+            }
+          >
+            {icon}
+          </span>
+          <span className="text-gray-700 text-[13px] font-medium">{label}</span>
         </div>
-        <span className={`${statusColors[status]}`} style={{ fontSize: '18px', fontWeight: 700 }}>
-          {value}{unit}
+        <span
+          className={`${statusColors[status as keyof typeof statusColors] || statusColors.normal} text-[18px] font-bold`}
+        >
+          {value}
+          {unit}
         </span>
       </div>
       <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
         <div
-          className={`h-full ${barColors[status]} rounded-full transition-all`}
+          className={`h-full ${barColors[status as keyof typeof barColors] || barColors.normal} rounded-full transition-all`}
           style={{ width: `${percentage}%` }}
         />
       </div>
-      <div className="flex justify-between mt-1">
-        <span className="text-gray-400" style={{ fontSize: '11px' }}>{min}{unit}</span>
-        <span className="text-gray-400" style={{ fontSize: '11px' }}>{max}{unit}</span>
+      <div className="flex justify-between mt-1 text-gray-400 text-[11px]">
+        <span>
+          {min}
+          {unit}
+        </span>
+        <span>
+          {max}
+          {unit}
+        </span>
       </div>
     </div>
   );
 };
 
-// ===== MAIN DASHBOARD =====
+export const Dashboard = () => {
+  const navigate = useNavigate();
 
-export const Dashboard: React.FC = () => {
-  const [selectedPond, setSelectedPond] = useState('pond-a1');
+  // --- States cho Dữ liệu Tổng quát ---
+  const [kpis, setKpis] = useState<dashboardService.DashboardKPIs | null>(null);
+  const [recentAlerts, setRecentAlerts] = useState<
+    dashboardService.RecentAlert[]
+  >([]);
+  const [zonesOverview, setZonesOverview] = useState<
+    dashboardService.ZoneOverview[]
+  >([]);
 
-  // Tính toán KPIs
-  const totalZones = MOCK_ZONES.length;
-  const totalPonds = MOCK_PONDS.filter((p) => p.status === 'active').length;
-  const totalDevices = MOCK_DEVICES.length;
-  const onlineDevices = MOCK_DEVICES.filter((d) => d.isOnline).length;
-  const activeDevices = MOCK_DEVICES.filter((d) => d.isActive).length;
-  const criticalAlerts = MOCK_ALERTS.filter((a) => a.severity === 'critical' && !a.isResolved).length;
+  // --- States cho Bộ lọc và Cảm biến theo Ao ---
+  const [zones, setZones] = useState<sensorService.Zone[]>([]);
+  const [ponds, setPonds] = useState<sensorService.Pond[]>([]);
+  const [selectedZone, setSelectedZone] = useState<string>('');
+  const [selectedPond, setSelectedPond] = useState<string>('');
+  const [sensorStatusData, setSensorStatusData] = useState<
+    sensorService.SensorData[]
+  >([]);
 
-  // Dữ liệu biểu đồ tổng hợp (24h)
-  const tempHistory = generateSensorHistory(28.5, 2);
-  const phHistory = generateSensorHistory(7.8, 0.4);
-  const doHistory = generateSensorHistory(5.2, 1.0);
+  // --- States cho Phân trang (Pagination) của Zones ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const zonesPerPage = 6;
 
-  const chartData = tempHistory.map((item, index) => ({
-    time: new Date(item.timestamp).getHours() + ':00',
-    'Nhiệt độ (°C)': item.value,
-    'pH': phHistory[index]?.value ?? 7.5,
-    'DO (mg/L)': doHistory[index]?.value ?? 5.0,
-  }));
+  // 1. Khởi tạo: Lấy dữ liệu KPI, Alerts và danh sách Zones
+  useEffect(() => {
+    dashboardService.getKPIs().then(setKpis);
+    dashboardService.getRecentAlerts(5).then(setRecentAlerts);
+    dashboardService.getZonesOverview().then(setZonesOverview);
 
-  // Dữ liệu Pie chart trạng thái thiết bị
-  const deviceStatusData = [
-    { name: 'Online & Hoạt động', value: activeDevices, color: '#10b981' },
-    { name: 'Online & Tắt', value: onlineDevices - activeDevices, color: '#6b7280' },
-    { name: 'Offline', value: totalDevices - onlineDevices, color: '#ef4444' },
-  ];
+    sensorService.getZones().then((data) => {
+      setZones(data);
+      // Bỏ đoạn tự động chọn Zone ở đây để nó hiện "-- Chọn Vùng Nuôi --"
+    });
+  }, []);
 
-  // Cảm biến tổng hợp cho Pond A1
-  const pondSensors = MOCK_SENSORS.filter((s) => s.pondId === selectedPond);
+  // 2. Khi chọn Zone: Lấy danh sách Ao của Zone đó
+  useEffect(() => {
+    if (!selectedZone) {
+      setPonds([]); // Nếu không chọn vùng thì xóa danh sách ao
+      return;
+    }
+    sensorService.getPondsByZone(selectedZone).then((data) => {
+      setPonds(data);
+      setSelectedPond(''); // Cố tình set rỗng để hiện "-- Chọn Ao Nuôi --"
+    });
+  }, [selectedZone]);
+
+  // 2. Khi chọn Zone: Lấy danh sách Ao của Zone đó
+  useEffect(() => {
+    if (!selectedZone) return;
+    sensorService.getPondsByZone(selectedZone).then((data) => {
+      setPonds(data);
+      if (data.length > 0) setSelectedPond(data[0].id);
+      else setSelectedPond('');
+    });
+  }, [selectedZone]);
+
+  // 3. Khi chọn Ao: Lấy dữ liệu cảm biến mới nhất
+  useEffect(() => {
+    if (!selectedPond) {
+      setSensorStatusData([]);
+      return;
+    }
+
+    // Hàm gọi API
+    const fetchLatestData = () => {
+      sensorService.getLatestSensors(selectedPond).then(setSensorStatusData);
+    };
+
+    // 1. Gọi ngay lập tức lần đầu tiên khi vừa chọn Ao
+    fetchLatestData();
+
+    // 2. Cài đặt bộ đếm (Interval) cứ 5 giây (5000ms) gọi lại hàm 1 lần
+    const interval = setInterval(fetchLatestData, 5000);
+
+    // 3. Clean-up: Hủy bộ đếm khi bạn chọn sang Ao khác hoặc rời khỏi trang Dashboard
+    return () => clearInterval(interval);
+  }, [selectedPond]);
+
+  // Logic phân trang
+  const totalPages = Math.ceil(zonesOverview.length / zonesPerPage);
+  const currentZones = zonesOverview.slice(
+    (currentPage - 1) * zonesPerPage,
+    currentPage * zonesPerPage,
+  );
+
+  const deviceStatusData = kpis
+    ? [
+        { name: 'Hoạt động', value: kpis.activeDevices, color: '#10b981' },
+        {
+          name: 'Ngoại tuyến',
+          value: Math.max(0, kpis.totalDevices - kpis.onlineDevices),
+          color: '#ef4444',
+        },
+        {
+          name: 'Chờ',
+          value: Math.max(0, kpis.onlineDevices - kpis.activeDevices),
+          color: '#f59e0b',
+        },
+      ]
+    : [];
 
   return (
-    <div className="space-y-6">
-      {/* KPI Stats Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="space-y-6 pb-10">
+      {/* HÀNG 1: KPI TỔNG QUAN */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Vùng Ao Hoạt động"
-          value={totalZones}
-          subtitle={`${totalZones} khu vực`}
+          title="Khu Vực"
+          value={kpis?.totalZones || 0}
+          subtitle="Tổng số vùng quản lý"
           icon={<Waves size={22} />}
           color="text-teal-600"
           bgColor="bg-teal-50"
-          trend={{ value: 0, isUp: true }}
         />
         <StatCard
-          title="Ao Đang Nuôi"
-          value={totalPonds}
-          subtitle={`${MOCK_PONDS.length} ao tổng cộng`}
+          title="Ao Nuôi"
+          value={kpis?.totalPonds || 0}
+          subtitle="Tổng ao đang vận hành"
           icon={<Activity size={22} />}
           color="text-blue-600"
           bgColor="bg-blue-50"
-          trend={{ value: 12, isUp: true }}
         />
         <StatCard
-          title="Thiết Bị Online"
-          value={`${onlineDevices}/${totalDevices}`}
-          subtitle={`${activeDevices} đang hoạt động`}
+          title="Thiết Bị"
+          value={`${kpis?.onlineDevices || 0}/${kpis?.totalDevices || 0}`}
+          subtitle="Đang kết nối trực tuyến"
           icon={<Cpu size={22} />}
           color="text-emerald-600"
           bgColor="bg-emerald-50"
-          trend={{ value: 3, isUp: true }}
         />
         <StatCard
-          title="Cảnh Báo Nghiêm Trọng"
-          value={criticalAlerts}
-          subtitle="Cần xử lý ngay"
+          title="Cảnh Báo"
+          value={kpis?.criticalAlerts || 0}
+          subtitle="Cần xử lý khẩn cấp"
           icon={<BellRing size={22} />}
-          color={criticalAlerts > 0 ? 'text-red-600' : 'text-gray-600'}
-          bgColor={criticalAlerts > 0 ? 'bg-red-50' : 'bg-gray-50'}
-          trend={{ value: criticalAlerts > 0 ? 50 : 0, isUp: false }}
+          color={
+            (kpis?.criticalAlerts || 0) > 0 ? 'text-red-600' : 'text-gray-400'
+          }
+          bgColor={(kpis?.criticalAlerts || 0) > 0 ? 'bg-red-50' : 'bg-gray-50'}
         />
       </div>
 
-      {/* Main Charts & Sensor Row */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Line Chart - Lịch sử cảm biến 24h */}
-        <div className="xl:col-span-2 bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-gray-900" style={{ fontSize: '15px', fontWeight: 600 }}>
-                Biểu Đồ Cảm Biến 24 Giờ
-              </h3>
-              <p className="text-gray-400" style={{ fontSize: '12px' }}>Dữ liệu real-time từ Adafruit IO</p>
-            </div>
-            <select
-              className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 outline-none"
-              style={{ fontSize: '13px' }}
-              value={selectedPond}
-              onChange={(e) => setSelectedPond(e.target.value)}
-            >
-              {MOCK_PONDS.filter((p) => p.status === 'active').map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+      {/* HÀNG 2: BỘ LỌC VÀ TRẠNG THÁI AO CỤ THỂ */}
+      <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6">
+          <div>
+            <h3 className="text-gray-900 text-lg font-bold">Giám Sát Nhanh</h3>
+            <p className="text-gray-400 text-sm">
+              Xem thông số môi trường tức thời của từng ao
+            </p>
           </div>
-          <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={chartData.filter((_, i) => i % 2 === 0)}>
-              <defs>
-                <linearGradient id="tempGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#f97316" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="doGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="time" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <Tooltip
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-              />
-              <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-              <Area type="monotone" dataKey="Nhiệt độ (°C)" stroke="#f97316" strokeWidth={2} fill="url(#tempGrad)" dot={false} />
-              <Area type="monotone" dataKey="DO (mg/L)" stroke="#3b82f6" strokeWidth={2} fill="url(#doGrad)" dot={false} />
-              <Line type="monotone" dataKey="pH" stroke="#8b5cf6" strokeWidth={2} dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
+
+          {/* THANH CHỌN KHU VỰC & AO (Style giống Monitoring) */}
+          <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto">
+            <div className="bg-slate-50 p-3 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3 flex-1 xl:min-w-[220px]">
+              <MapPin className="text-slate-400" size={18} />
+              <select
+                className="w-full bg-transparent font-semibold text-slate-700 outline-none text-sm cursor-pointer"
+                value={selectedZone}
+                onChange={(e) => {
+                  setSelectedZone(e.target.value);
+                  setSelectedPond('');
+                }}
+              >
+                <option value="">-- Chọn Vùng Nuôi --</option>
+                {zones.map((z) => (
+                  <option key={z.id} value={z.id}>
+                    {z.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="bg-slate-50 p-3 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3 flex-1 xl:min-w-[220px]">
+              <Fish className="text-slate-400" size={18} />
+              <select
+                className="w-full bg-transparent font-semibold text-slate-700 outline-none text-sm cursor-pointer"
+                disabled={!selectedZone}
+                value={selectedPond}
+                onChange={(e) => setSelectedPond(e.target.value)}
+              >
+                <option value="">-- Chọn Ao Nuôi --</option>
+                {ponds.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
-        {/* Pie Chart - Trạng thái thiết bị */}
-        <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
-          <h3 className="text-gray-900 mb-1" style={{ fontSize: '15px', fontWeight: 600 }}>
-            Trạng Thái Thiết Bị
-          </h3>
-          <p className="text-gray-400 mb-4" style={{ fontSize: '12px' }}>
-            Tổng {totalDevices} thiết bị
-          </p>
-          <ResponsiveContainer width="100%" height={180}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {!selectedZone || !selectedPond ? (
+            /* TRẠNG THÁI CHƯA CHỌN VÙNG/AO */
+            <div className="col-span-full py-12 text-center text-gray-400 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+              <Activity size={32} className="mx-auto mb-3 opacity-20" />
+              <p>Vui lòng chọn Vùng và Ao để xem dữ liệu tức thời.</p>
+            </div>
+          ) : sensorStatusData.length > 0 ? (
+            /* TRẠNG THÁI CÓ DỮ LIỆU */
+            <>
+              {sensorStatusData.map((s) => {
+                let label = s.name || s.type;
+                let unit = s.unit || '';
+                let min = 0;
+                let max = 100;
+                let icon = <Activity size={18} />;
+
+                if (s.type === 'temperature') {
+                  label = 'Nhiệt độ';
+                  unit = '°C';
+                  min = 20;
+                  max = 35;
+                  icon = <ThermometerSun size={18} />;
+                } else if (s.type === 'water-level') {
+                  label = 'Mực nước';
+                  unit = '%';
+                  min = 10;
+                  max = 90;
+                  icon = <Waves size={18} />;
+                } else if (s.type === 'brightness') {
+                  label = 'Ánh sáng';
+                  unit = '%';
+                  min = 0;
+                  max = 100;
+                  icon = <Sun size={18} />;
+                }
+
+                return (
+                  <SensorStatusCard
+                    key={s.id}
+                    label={label}
+                    value={s.value}
+                    unit={unit}
+                    min={min}
+                    max={max}
+                    status={s.status || 'normal'}
+                    icon={icon}
+                  />
+                );
+              })}
+
+              {/* Thẻ thứ 4: Link sang Monitoring */}
+              <div
+                onClick={() =>
+                  navigate(
+                    `/monitoring?zoneId=${selectedZone}&pondId=${selectedPond}`,
+                  )
+                }
+                className="group rounded-xl p-4 border-2 border-dashed border-blue-200 bg-blue-50/30 flex flex-col items-center justify-center cursor-pointer hover:bg-blue-50 hover:border-blue-400 hover:shadow-sm transition-all"
+              >
+                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm text-blue-500 mb-3 group-hover:scale-110 group-hover:text-blue-600 transition-transform duration-300">
+                  <Activity size={24} />
+                </div>
+                <span className="text-[14px] font-bold text-blue-700 group-hover:text-blue-800">
+                  Phân Tích Chi Tiết
+                </span>
+                <span className="text-[11px] text-blue-500 mt-1 flex items-center gap-1 font-medium">
+                  Chuyển sang biểu đồ <ArrowUpRight size={14} />
+                </span>
+              </div>
+            </>
+          ) : (
+            /* TRẠNG THÁI CHỌN AO NHƯNG KHÔNG CÓ DATA SENSOR */
+            <div className="col-span-full py-12 text-center text-gray-500 bg-gray-50/50 rounded-xl border border-dashed border-gray-200 flex flex-col items-center justify-center gap-3">
+              <div className="p-3 bg-white rounded-full shadow-sm">
+                <Activity size={28} className="text-gray-300" />
+              </div>
+              <div>
+                <p className="font-bold text-gray-700 text-[15px]">
+                  Ao này chưa có dữ liệu
+                </p>
+                <p className="text-[13px] text-gray-400 mt-1">
+                  Cảm biến có thể đang tắt hoặc chưa được kết nối.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* HÀNG 3: BIỂU ĐỒ THIẾT BỊ & NHẬT KÝ CẢNH BÁO */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
+          <h3 className="text-gray-900 font-bold mb-4">Hạ Tầng Thiết Bị</h3>
+          <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie
                 data={deviceStatusData}
-                cx="50%"
-                cy="50%"
-                innerRadius={50}
-                outerRadius={75}
-                paddingAngle={3}
+                innerRadius={60}
+                outerRadius={80}
+                paddingAngle={5}
                 dataKey="value"
               >
                 {deviceStatusData.map((entry, index) => (
                   <Cell key={index} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+              <Tooltip />
             </PieChart>
           </ResponsiveContainer>
-          <div className="space-y-2 mt-2">
-            {deviceStatusData.map((item) => (
-              <div key={item.name} className="flex items-center justify-between">
+          <div className="mt-4 space-y-2">
+            {deviceStatusData.map((d) => (
+              <div
+                key={d.name}
+                className="flex items-center justify-between text-sm"
+              >
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="text-gray-600" style={{ fontSize: '12px' }}>{item.name}</span>
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: d.color }}
+                  />{' '}
+                  {d.name}
                 </div>
-                <span className="text-gray-900" style={{ fontSize: '13px', fontWeight: 600 }}>{item.value}</span>
+                <span className="font-bold">{d.value}</span>
               </div>
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Sensor Status + Recent Alerts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Sensor Status Cards */}
-        <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-gray-900" style={{ fontSize: '15px', fontWeight: 600 }}>
-              Thông Số Cảm Biến
-            </h3>
-            <span className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg" style={{ fontSize: '12px', fontWeight: 500 }}>
-              Ao A1 - Real-time
-            </span>
-          </div>
+        <div className="lg:col-span-2 bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
+          <h3 className="text-gray-900 font-bold mb-4">Cảnh Báo Gần Đây</h3>
           <div className="space-y-3">
-            {pondSensors.slice(0, 4).map((sensor) => {
-              const icons: Record<string, React.ReactNode> = {
-                temperature: <ThermometerSun size={16} />,
-                ph: <Droplets size={16} />,
-                do: <Wind size={16} />,
-                turbidity: <Activity size={16} />,
-              };
-              const labels: Record<string, string> = {
-                temperature: 'Nhiệt độ',
-                ph: 'Độ pH',
-                do: 'Oxy hòa tan',
-                turbidity: 'Độ đục',
-                salinity: 'Độ mặn',
-              };
-              return (
-                <SensorStatusCard
-                  key={sensor.id}
-                  label={labels[sensor.type] || sensor.type}
-                  value={sensor.currentValue}
-                  unit={sensor.unit}
-                  min={sensor.minThreshold}
-                  max={sensor.maxThreshold}
-                  status={sensor.status}
-                  icon={icons[sensor.type] || <Activity size={16} />}
-                />
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Recent Alerts */}
-        <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-gray-900" style={{ fontSize: '15px', fontWeight: 600 }}>
-              Cảnh Báo Gần Đây
-            </h3>
-            <span className="text-emerald-600 hover:underline cursor-pointer" style={{ fontSize: '13px' }}>
-              Xem tất cả →
-            </span>
-          </div>
-          <div className="space-y-3">
-            {MOCK_ALERTS.slice(0, 5).map((alert) => (
-              <div key={alert.id} className={`flex items-start gap-3 p-3 rounded-lg ${
-                !alert.isRead ? 'bg-gray-50' : ''
-              }`}>
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                  alert.severity === 'critical'
-                    ? 'bg-red-100'
-                    : alert.severity === 'warning'
-                    ? 'bg-amber-100'
-                    : 'bg-blue-100'
-                }`}>
-                  {alert.severity === 'critical' ? (
-                    <AlertTriangle size={15} className="text-red-600" />
-                  ) : alert.severity === 'warning' ? (
-                    <AlertTriangle size={15} className="text-amber-600" />
-                  ) : (
-                    <CheckCircle2 size={15} className="text-blue-600" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-900 truncate" style={{ fontSize: '13px', fontWeight: 500 }}>
-                      {alert.pondName} - {alert.sensorType}
-                    </span>
-                    {!alert.isRead && (
-                      <span className="w-2 h-2 bg-blue-500 rounded-full shrink-0" />
-                    )}
+            {recentAlerts.length > 0 ? (
+              recentAlerts.map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-center gap-4 p-3 rounded-lg border border-gray-50 hover:bg-gray-50 transition-colors"
+                >
+                  <div
+                    className={`p-2 rounded-full ${a.severity === 'critical' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}
+                  >
+                    <AlertTriangle size={18} />
                   </div>
-                  <p className="text-gray-500 truncate" style={{ fontSize: '12px' }}>
-                    {alert.message.substring(0, 55)}...
-                  </p>
-                  <p className="text-gray-400 mt-0.5" style={{ fontSize: '11px' }}>
-                    {new Date(alert.timestamp).toLocaleString('vi-VN')}
-                  </p>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full shrink-0 ${
-                  alert.severity === 'critical'
-                    ? 'bg-red-100 text-red-700'
-                    : alert.severity === 'warning'
-                    ? 'bg-amber-100 text-amber-700'
-                    : 'bg-blue-100 text-blue-700'
-                }`} style={{ fontSize: '10px', fontWeight: 600 }}>
-                  {alert.severity === 'critical' ? 'NGUY CẤP' : alert.severity === 'warning' ? 'CẢNH BÁO' : 'INFO'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Zone Overview Grid */}
-      <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-gray-900" style={{ fontSize: '15px', fontWeight: 600 }}>
-            Tổng Quan Theo Khu Vực
-          </h3>
-          <TrendingUp size={18} className="text-gray-400" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {MOCK_ZONES.map((zone) => {
-            const zonePonds = MOCK_PONDS.filter((p) => p.zoneId === zone.id);
-            const zoneDevices = MOCK_DEVICES.filter((d) => d.zoneId === zone.id);
-            const zoneActiveDevices = zoneDevices.filter((d) => d.isActive).length;
-            const zoneAlerts = MOCK_ALERTS.filter(
-              (a) => zonePonds.some((p) => p.id === a.pondId) && !a.isResolved
-            ).length;
-
-            return (
-              <div key={zone.id} className="border border-gray-100 rounded-xl p-4 hover:border-emerald-200 hover:shadow-sm transition-all cursor-pointer">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <p className="text-gray-900" style={{ fontSize: '14px', fontWeight: 600 }}>{zone.name}</p>
-                    <p className="text-gray-400" style={{ fontSize: '12px' }}>{zone.location}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-900 truncate">
+                      {a.pondName} - {a.sensorType}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {a.message}
+                    </p>
                   </div>
-                  <span className={`px-2.5 py-1 rounded-full ${
-                    zone.status === 'active'
-                      ? 'bg-emerald-50 text-emerald-700'
-                      : zone.status === 'maintenance'
-                      ? 'bg-amber-50 text-amber-700'
-                      : 'bg-gray-100 text-gray-600'
-                  }`} style={{ fontSize: '11px', fontWeight: 600 }}>
-                    {zone.status === 'active' ? 'Hoạt động' : zone.status === 'maintenance' ? 'Bảo trì' : 'Tắt'}
+                  <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                    {new Date(a.timestamp).toLocaleTimeString('vi-VN')}
                   </span>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="text-center p-2 bg-blue-50 rounded-lg">
-                    <p className="text-blue-700" style={{ fontSize: '16px', fontWeight: 700 }}>{zonePonds.length}</p>
-                    <p className="text-blue-500" style={{ fontSize: '10px' }}>Ao nuôi</p>
-                  </div>
-                  <div className="text-center p-2 bg-emerald-50 rounded-lg">
-                    <p className="text-emerald-700" style={{ fontSize: '16px', fontWeight: 700 }}>{zoneActiveDevices}</p>
-                    <p className="text-emerald-500" style={{ fontSize: '10px' }}>Đang chạy</p>
-                  </div>
-                  <div className={`text-center p-2 rounded-lg ${zoneAlerts > 0 ? 'bg-red-50' : 'bg-gray-50'}`}>
-                    <p className={`${zoneAlerts > 0 ? 'text-red-700' : 'text-gray-500'}`} style={{ fontSize: '16px', fontWeight: 700 }}>{zoneAlerts}</p>
-                    <p className={`${zoneAlerts > 0 ? 'text-red-400' : 'text-gray-400'}`} style={{ fontSize: '10px' }}>Cảnh báo</p>
-                  </div>
+              ))
+            ) : (
+              <p className="text-center py-10 text-gray-400">
+                Không có cảnh báo mới.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* HÀNG 4: TỔNG QUAN KHU VỰC (VỚI PHÂN TRANG VÀ ĐIỀU HƯỚNG) */}
+      <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="text-gray-900 font-bold">Danh Sách Khu Vực</h3>
+            <p className="text-gray-400 text-xs">
+              Nhấp vào khu vực để xem chi tiết giám sát
+            </p>
+          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 border rounded-md disabled:opacity-30 hover:bg-gray-50"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span className="text-xs font-medium">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
+                disabled={currentPage === totalPages}
+                className="p-1.5 border rounded-md disabled:opacity-30 hover:bg-gray-50"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {currentZones.map((z) => (
+            <div
+              key={z.id}
+              onClick={() => navigate(`/monitoring?zoneId=${z.id}`)}
+              className="group border border-gray-100 rounded-xl p-5 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer bg-gray-50/30"
+            >
+              <div className="flex justify-between items-start mb-4">
+                <div className="min-w-0">
+                  <p className="text-gray-900 font-bold group-hover:text-blue-600 truncate">
+                    {z.name}
+                  </p>
+                  <p className="text-gray-400 text-[11px] flex items-center gap-1 mt-1 truncate">
+                    <Settings size={12} />{' '}
+                    {z.location || 'Vị trí chưa xác định'}
+                  </p>
+                </div>
+                <ArrowUpRight
+                  size={16}
+                  className="text-gray-300 group-hover:text-blue-500 transition-colors"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-white p-2 rounded-lg text-center shadow-sm">
+                  <p className="text-blue-600 font-bold text-lg">
+                    {z.totalPonds}
+                  </p>
+                  <p className="text-[9px] text-gray-400 uppercase font-bold">
+                    Ao
+                  </p>
+                </div>
+                <div className="bg-white p-2 rounded-lg text-center shadow-sm">
+                  <p className="text-emerald-500 font-bold text-lg">
+                    {z.activeDevices}
+                  </p>
+                  <p className="text-[9px] text-gray-400 uppercase font-bold">
+                    Máy
+                  </p>
+                </div>
+                <div
+                  className={`bg-white p-2 rounded-lg text-center shadow-sm ${z.activeAlerts > 0 ? 'ring-1 ring-red-100' : ''}`}
+                >
+                  <p
+                    className={`${z.activeAlerts > 0 ? 'text-red-500' : 'text-gray-300'} font-bold text-lg`}
+                  >
+                    {z.activeAlerts}
+                  </p>
+                  <p className="text-[9px] text-gray-400 uppercase font-bold">
+                    Lỗi
+                  </p>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       </div>
     </div>
