@@ -19,6 +19,7 @@ import {
   LogOut,
   Settings,
   Zap,
+  Activity,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
@@ -51,30 +52,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: "QUẢN TRỊ HỆ THỐNG",
     items: [
-      {
-        path: "/admin/zones",
-        label: "Vùng Ao (Zone)",
-        icon: <Waves size={18} />,
-        adminOnly: true,
-      },
-      {
-        path: "/admin/ponds",
-        label: "Ao Nuôi",
-        icon: <Fish size={18} />,
-        adminOnly: true,
-      },
-      {
-        path: "/admin/devices",
-        label: "Thiết Bị",
-        icon: <Cpu size={18} />,
-        adminOnly: true,
-      },
-      {
-        path: "/admin/users",
-        label: "Tài Khoản",
-        icon: <Users size={18} />,
-        adminOnly: true,
-      },
+      { path: '/admin/zones', label: 'Vùng Ao (Zone)', icon: <Waves size={18} />, adminOnly: true },
+      { path: '/admin/ponds', label: 'Ao Nuôi', icon: <Fish size={18} />, adminOnly: true },
+      { path: '/admin/devices', label: 'Thiết Bị', icon: <Cpu size={18} />, adminOnly: true },
+      { path: '/admin/users', label: 'Tài Khoản', icon: <Users size={18} />, adminOnly: true },
     ],
   },
   {
@@ -198,10 +179,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                         className={`
                           flex items-center gap-3 px-3 py-2.5 rounded-lg
                           transition-all duration-150 group relative
-                          ${
-                            isActive(item.path)
-                              ? "bg-emerald-500 text-white shadow-lg shadow-emerald-900/30"
-                              : "text-white/70 hover:bg-white/10 hover:text-white"
+                          ${isActive(item.path)
+                            ? "bg-emerald-500 text-white shadow-lg shadow-emerald-900/30"
+                            : "text-white/70 hover:bg-white/10 hover:text-white"
                           }
                         `}
                       >
