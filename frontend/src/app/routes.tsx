@@ -37,6 +37,7 @@ import { BaoCao } from './pages/reports/BaoCao';
 import { Chatbot } from './pages/chatbot/Chatbot';
 import { ZonesPage } from './pages/admin/ZonesPage';
 import { UsersPage } from './pages/admin/UsersPage';
+import { ActivityLogsPage } from './pages/admin/ActivityLogsPage';
 import { MonitoringPage } from './pages/monitoring/MonitoringPage';
 import { NotFound } from './pages/NotFound';
 
@@ -101,6 +102,7 @@ export const router = createBrowserRouter([
               { path: 'ponds',   element: <PlaceholderPage title="Quản Lý Ao Nuôi" icon="🐟" /> },
               { path: 'devices', element: <PlaceholderPage title="Quản Lý Thiết Bị IoT" icon="⚡" /> },
               { path: 'users',   element: <UsersPage /> },
+              { path: 'logs',    element: <ActivityLogsPage /> },
             ],
           },
 

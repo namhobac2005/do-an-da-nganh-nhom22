@@ -1,0 +1,11 @@
+DATABASE_URL=
+JWT_SECRET=
+
+AIO_KEY=
+AIO_USERNAME=
+
+SUPABASE_URL=
+SUPABASE_KEY=
+# REQUIRED: Service role (secret) key — bypasses RLS for all admin DB operations
+# Supabase Dashboard → Project Settings → API → service_role key
+SUPABASE_SERVICE_ROLE_KEY=

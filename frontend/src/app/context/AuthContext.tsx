@@ -4,65 +4,45 @@
  * Sử dụng Context API + useReducer theo pattern chuẩn
  */
 
-import React, { createContext, useContext, useReducer, useCallback } from 'react';
-import type { User, UserRole } from '../data/mockData';
+import React, { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
+import type { UserRole } from '../data/mockData';
 
 // ===== TYPES =====
 
+const API_URL = 'http://localhost:5000';
+
+/** Minimal user shape stored in context. */
+interface AuthUser {
+  id:       string;
+  name:     string;
+  email:    string;
+  phone:    string | null;
+  role:     UserRole;
+  status:   string;
+  zoneId?:  string;
+}
+
 interface AuthState {
-  user: User | null;
+  user:            AuthUser | null;
   isAuthenticated: boolean;
-  isLoading: boolean;
-  error: string | null;
+  isLoading:       boolean;
+  error:           string | null;
 }
 
 type AuthAction =
   | { type: 'LOGIN_START' }
-  | { type: 'LOGIN_SUCCESS'; payload: User }
+  | { type: 'LOGIN_SUCCESS'; payload: AuthUser }
   | { type: 'LOGIN_FAILURE'; payload: string }
   | { type: 'LOGOUT' }
   | { type: 'CLEAR_ERROR' };
 
 interface AuthContextValue extends AuthState {
-  login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
-  clearError: () => void;
-  hasRole: (role: UserRole) => boolean;
+  login:         (email: string, password: string) => Promise<boolean>;
+  logout:        () => void;
+  clearError:    () => void;
+  hasRole:       (role: UserRole) => boolean;
   hasZoneAccess: (zoneId: string) => boolean;
 }
-
-// ===== MOCK CREDENTIALS =====
-// Trong production, đây sẽ là API call đến backend
-
-const MOCK_CREDENTIALS: Record<string, { password: string; user: User }> = {
-  'admin@aquasmart.vn': {
-    password: 'Admin@123',
-    user: {
-      id: 'user-1',
-      name: 'Nguyễn Văn Admin',
-      email: 'admin@aquasmart.vn',
-      phone: '0901234567',
-      role: 'admin',
-      status: 'active',
-      createdAt: '2023-01-01',
-      lastLogin: new Date().toISOString(),
-    },
-  },
-  'mai.tran@aquasmart.vn': {
-    password: 'User@123',
-    user: {
-      id: 'user-2',
-      name: 'Trần Thị Mai',
-      email: 'mai.tran@aquasmart.vn',
-      phone: '0912345678',
-      role: 'user',
-      zoneId: 'zone-1',
-      status: 'active',
-      createdAt: '2023-01-15',
-      lastLogin: new Date().toISOString(),
-    },
-  },
-};
 
 // ===== REDUCER =====
 
@@ -74,28 +54,23 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
     case 'LOGIN_SUCCESS':
       return {
         ...state,
-        isLoading: false,
+        isLoading:       false,
         isAuthenticated: true,
-        user: action.payload,
-        error: null,
+        user:            action.payload,
+        error:           null,
       };
 
     case 'LOGIN_FAILURE':
       return {
         ...state,
-        isLoading: false,
+        isLoading:       false,
         isAuthenticated: false,
-        user: null,
-        error: action.payload,
+        user:            null,
+        error:           action.payload,
       };
 
     case 'LOGOUT':
-      return {
-        ...state,
-        isAuthenticated: false,
-        user: null,
-        error: null,
-      };
+      return { ...state, isAuthenticated: false, user: null, error: null };
 
     case 'CLEAR_ERROR':
       return { ...state, error: null };
@@ -108,10 +83,10 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
 // ===== INITIAL STATE =====
 
 const initialState: AuthState = {
-  user: null,
+  user:            null,
   isAuthenticated: false,
-  isLoading: false,
-  error: null,
+  isLoading:       false,
+  error:           null,
 };
 
 // ===== CONTEXT =====
@@ -123,35 +98,65 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
+  // Restore session from storage on initial mount
+  useEffect(() => {
+    const raw = sessionStorage.getItem('aquasmart_session');
+    if (raw) {
+      try {
+        const session = JSON.parse(raw) as { token: string; user: AuthUser };
+        if (session.token && session.user) {
+          dispatch({ type: 'LOGIN_SUCCESS', payload: session.user });
+        }
+      } catch {
+        sessionStorage.removeItem('aquasmart_session');
+      }
+    }
+  }, []);
+
   /**
-   * Hàm đăng nhập - giả lập API call
-   * Trong production: gọi axios.post('/api/auth/login', { email, password })
+   * Hàm đăng nhập — gọi backend POST /auth/login để lấy JWT.
    */
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     dispatch({ type: 'LOGIN_START' });
+    try {
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email, password }),
+      });
 
-    // Giả lập network delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+      const data = await res.json();
 
-    const credentials = MOCK_CREDENTIALS[email.toLowerCase()];
+      if (!res.ok || !data.success) {
+        dispatch({ type: 'LOGIN_FAILURE', payload: data.message ?? 'Đăng nhập thất bại.' });
+        return false;
+      }
 
-    if (credentials && credentials.password === password) {
-      dispatch({ type: 'LOGIN_SUCCESS', payload: credentials.user });
-      // Lưu vào sessionStorage để persist qua refresh (optional)
-      sessionStorage.setItem('aquasmart_user', JSON.stringify(credentials.user));
+      const authUser: AuthUser = {
+        id:    data.user.id,
+        name:  data.user.fullName ?? data.user.email,
+        email: data.user.email,
+        phone: data.user.phone ?? null,
+        role:  data.user.role,
+        status: data.user.status,
+      };
+
+      dispatch({ type: 'LOGIN_SUCCESS', payload: authUser });
+      // Persist token + user so session survives page refresh
+      sessionStorage.setItem('aquasmart_session', JSON.stringify({ token: data.token, user: authUser }));
       return true;
-    } else {
-      dispatch({ type: 'LOGIN_FAILURE', payload: 'Email hoặc mật khẩu không đúng. Vui lòng thử lại.' });
+    } catch {
+      dispatch({ type: 'LOGIN_FAILURE', payload: 'Không thể kết nối đến máy chủ. Vui lòng thử lại.' });
       return false;
     }
   }, []);
 
   /**
-   * Hàm đăng xuất - xóa session
+   * Hàm đăng xuất — xóa session
    */
   const logout = useCallback(() => {
     dispatch({ type: 'LOGOUT' });
-    sessionStorage.removeItem('aquasmart_user');
+    sessionStorage.removeItem('aquasmart_session');
   }, []);
 
   const clearError = useCallback(() => {
@@ -160,9 +165,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   /** Kiểm tra user có role nhất định không */
   const hasRole = useCallback(
-    (role: UserRole): boolean => {
-      return state.user?.role === role;
-    },
+    (role: UserRole): boolean => state.user?.role === role,
     [state.user]
   );
 
@@ -170,9 +173,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const hasZoneAccess = useCallback(
     (zoneId: string): boolean => {
       if (!state.user) return false;
-      // Admin có quyền truy cập tất cả zone
       if (state.user.role === 'admin') return true;
-      // User chỉ có quyền trên zone được phân công
       return state.user.zoneId === zoneId;
     },
     [state.user]

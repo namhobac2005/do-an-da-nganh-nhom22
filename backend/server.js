@@ -8,10 +8,15 @@ import { runDueSchedules } from './services/schedule.service.ts';
 // Import router
 import deviceRoutes from './routes/device.route.js';
 import sensorRoutes from './routes/sensor.route.js';
+
 import scheduleRoutes from './routes/schedule.route.ts';
 import reportRoutes from './routes/report.route.ts';
 import dashboardRoutes from './routes/dashboard.route.ts';
 
+import authRoutes from './routes/auth.route.js';
+import userRoutes from './routes/user.route.js';
+import zoneRoutes from './routes/zone.route.js';
+import logRoutes from './routes/log.route.js';
 dotenv.config();
 
 const app = express();
@@ -36,6 +41,12 @@ setInterval(() => {
     console.error('❌ Scheduler error:', error.message);
   });
 }, 5000);
+
+// ================= USER MANAGEMENT API =================
+app.use('/auth', authRoutes);
+app.use('/admin/users', userRoutes);
+app.use('/admin/zones', zoneRoutes);
+app.use('/admin/logs', logRoutes);
 
 // ================= START =================
 initMQTT();
