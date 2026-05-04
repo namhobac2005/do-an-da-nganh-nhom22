@@ -83,19 +83,42 @@ export const getDeviceLogs = async (
   limit: number = 50,
   actuatorId?: string,
 ) => {
-  let query = supabase
-    .from("actuator_logs")
-    .select(
-      "id, actuator_id, action, mode, status, user_id, created_at, actuators(name, type)",
-    )
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  try {
+    let query = supabase
+      .from("actuator_logs")
+      .select(
+        "id, actuator_id, action, mode, status, user_id, created_at, actuators(name, type)",
+      )
+      .order("created_at", { ascending: false })
+      .limit(limit);
 
-  if (actuatorId) {
-    query = query.eq("actuator_id", actuatorId);
+    if (actuatorId) {
+      query = query.eq("actuator_id", actuatorId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("[Backend] Error fetching logs with join:", error);
+      // Fallback: fetch logs without the join if join fails
+      let fallbackQuery = supabase
+        .from("actuator_logs")
+        .select("id, actuator_id, action, mode, status, user_id, created_at")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (actuatorId) {
+        fallbackQuery = fallbackQuery.eq("actuator_id", actuatorId);
+      }
+
+      const { data: fallbackData, error: fallbackError } = await fallbackQuery;
+      if (fallbackError) throw new Error(fallbackError.message);
+      return fallbackData || [];
+    }
+
+    return data || [];
+  } catch (error: any) {
+    console.error("[Backend] Error in getDeviceLogs:", error);
+    throw new Error(error.message);
   }
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return data;
 };

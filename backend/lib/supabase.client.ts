@@ -10,26 +10,28 @@
  *   Supabase Dashboard → Project Settings → API → service_role (secret) key
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl  = process.env.SUPABASE_URL  as string;
-const supabaseKey  = process.env.SUPABASE_KEY  as string;
+const supabaseUrl = process.env.SUPABASE_URL as string;
+const supabaseKey = process.env.SUPABASE_KEY as string;
 
 // Support both naming conventions for the service key
 const serviceKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_SERVICE_KEY      ||
-  '';
+  process.env.SUPABASE_SERVICE_KEY ||
+  "";
 
 if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing SUPABASE_URL or SUPABASE_KEY in environment variables.');
+  throw new Error(
+    "Missing SUPABASE_URL or SUPABASE_KEY in environment variables.",
+  );
 }
 
 if (!serviceKey) {
   console.error(
-    '❌  SUPABASE_SERVICE_ROLE_KEY is not set.\n' +
-    '    User management (create/list/delete) will fail due to RLS.\n' +
-    '    Add it to backend/.env from: Supabase Dashboard → Settings → API → service_role key'
+    "❌  SUPABASE_SERVICE_ROLE_KEY is not set.\n" +
+      "    User management (create/list/delete) will fail due to RLS.\n" +
+      "    Add it to backend/.env from: Supabase Dashboard → Settings → API → service_role key",
   );
 }
 
