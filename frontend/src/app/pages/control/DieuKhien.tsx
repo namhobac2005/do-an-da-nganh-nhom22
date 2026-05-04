@@ -34,6 +34,7 @@ import {
   type DeviceLog,
   type SendCommandResult,
 } from "../../services/deviceService";
+import { getZones } from "../../services/zoneService";
 
 // ===== CONSTANTS & CONFIG =====
 
@@ -220,6 +221,7 @@ export interface Device {
   isOnline: boolean;
   mode: DeviceMode;
   lastUpdated: string;
+  zone_id?: string | null;
 }
 
 // ===== CONFIRM DIALOG COMPONENT =====
@@ -623,6 +625,14 @@ export const DieuKhien: React.FC = () => {
   const [loadingDeviceId, setLoadingDeviceId] = useState<string | null>(null);
   const [commandLogs, setCommandLogs] = useState<DeviceLog[]>([]);
   const [schedules, setSchedules] = useState<DeviceSchedule[]>([]);
+  const [zones, setZones] = useState<{ id: string; name: string }[]>([]);
+  const [selectedZoneIds, setSelectedZoneIds] = useState<string[]>([]);
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+  const [repeatDaily, setRepeatDaily] = useState<boolean>(false);
+  const [scheduleMode, setScheduleMode] = useState<"template" | "custom">(
+    "template",
+  );
   const [isScheduleSubmitting, setIsScheduleSubmitting] = useState(false);
   const [isTemplateSubmitting, setIsTemplateSubmitting] = useState(false);
 
@@ -631,17 +641,51 @@ export const DieuKhien: React.FC = () => {
     const fetchInitialData = async () => {
       // Hàm getAllDevices giờ đã tự động map data chuẩn rồi
       const updatedDevices = await getAllDevices();
-      setDevices(
-        updatedDevices.filter((device: any) =>
-          ALLOWED_DEVICE_TYPES.includes(device.type),
-        ),
+      const filtered = updatedDevices.filter((device: any) =>
+        ALLOWED_DEVICE_TYPES.includes(device.type),
       );
+
+      // Only update devices state if there are actual changes
+      setDevices((prevDevices) => {
+        // If empty, just set it
+        if (prevDevices.length === 0) return filtered;
+
+        // Update only changed devices, maintain order and references for unchanged ones
+        return prevDevices.map((prevDev) => {
+          const updatedDev = filtered.find((d) => d.id === prevDev.id);
+          if (!updatedDev) return prevDev;
+
+          // Only return new object if properties actually changed
+          if (
+            prevDev.level === updatedDev.level &&
+            prevDev.isActive === updatedDev.isActive &&
+            prevDev.isOnline === updatedDev.isOnline &&
+            prevDev.mode === updatedDev.mode &&
+            prevDev.lastUpdated === updatedDev.lastUpdated
+          ) {
+            return prevDev; // Return same reference if nothing changed
+          }
+          return updatedDev; // Return updated device
+        });
+      });
     };
 
     fetchInitialData();
-    // Vẫn duy trì gọi API mỗi 5s để cập nhật trạng thái mới nhất từ DB
-    const interval = setInterval(fetchInitialData, 5000);
+    // Poll every 30s instead of 5s to reduce flickering
+    const interval = setInterval(fetchInitialData, 30000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const fetchZones = async () => {
+      try {
+        const zs = await getZones();
+        setZones(zs || []);
+      } catch (e) {
+        console.error("Không lấy được danh sách ao/zones:", e);
+      }
+    };
+    fetchZones();
   }, []);
 
   useEffect(() => {
@@ -802,9 +846,16 @@ export const DieuKhien: React.FC = () => {
       return;
     }
 
-    const targetDevices = devices.filter((device) =>
+    // Filter devices by template type AND by selected zones if any
+    let targetDevices = devices.filter((device) =>
       templates.some((template) => template.deviceType === device.type),
     );
+
+    if (selectedZoneIds.length > 0) {
+      targetDevices = targetDevices.filter((d) =>
+        selectedZoneIds.includes(d.zone_id),
+      );
+    }
 
     if (targetDevices.length === 0) {
       alert("Không có thiết bị phù hợp để áp dụng lịch mẫu cho loại nuôi này");
@@ -821,54 +872,65 @@ export const DieuKhien: React.FC = () => {
 
     setIsTemplateSubmitting(true);
 
+    // Build dates to apply: if repeatDaily is set, create range from startDate to endDate
+    const datesToApply: string[] = [];
+    if (repeatDaily && startDate && endDate) {
+      let cur = new Date(startDate);
+      const last = new Date(endDate);
+      while (cur <= last) {
+        datesToApply.push(cur.toISOString().slice(0, 10));
+        cur.setDate(cur.getDate() + 1);
+      }
+    } else if (startDate) {
+      datesToApply.push(startDate);
+    } else {
+      datesToApply.push(new Date().toISOString().slice(0, 10));
+    }
+
     const results = await Promise.all(
-      targetDevices.map(async (device) => {
+      targetDevices.flatMap((device) => {
         const matchedTemplate = templates.find(
           (template) => template.deviceType === device.type,
         );
 
         if (!matchedTemplate) {
-          return {
-            success: false,
-            deviceName: device.name,
-            reason: "Không có mẫu khớp loại thiết bị",
-          };
+          return [
+            {
+              success: false,
+              deviceName: device.name,
+              reason: "Không có mẫu khớp loại thiết bị",
+            },
+          ];
         }
 
-        const onResult = await createDeviceSchedule({
-          actuator_id: device.id,
-          target_level: matchedTemplate.onLevel,
-          schedule_at: new Date(
-            getNextDateTimeByTime(matchedTemplate.onTime),
-          ).toISOString(),
-          note: `${matchedTemplate.note} - Bật (${device.name})`,
+        // Create schedules for each device on each date
+        return datesToApply.flatMap((dateStr) => {
+          const onTime = `${dateStr}T${matchedTemplate.onTime}:00`;
+          const offTime = `${dateStr}T${matchedTemplate.offTime}:00`;
+
+          return [
+            createDeviceSchedule({
+              actuator_id: device.id,
+              target_level: matchedTemplate.onLevel,
+              schedule_at: new Date(onTime).toISOString(),
+              note: `${matchedTemplate.note} - Bật (${device.name})`,
+            }).then((onResult) => ({
+              success: onResult.success,
+              deviceName: device.name,
+              reason: onResult.error,
+            })),
+            createDeviceSchedule({
+              actuator_id: device.id,
+              target_level: 0,
+              schedule_at: new Date(offTime).toISOString(),
+              note: `${matchedTemplate.note} - Tắt (${device.name})`,
+            }).then((offResult) => ({
+              success: offResult.success,
+              deviceName: device.name,
+              reason: offResult.error,
+            })),
+          ];
         });
-
-        if (!onResult.success) {
-          return {
-            success: false,
-            deviceName: device.name,
-            reason: onResult.error || "Tạo lịch bật thất bại",
-          };
-        }
-
-        const offResult = await createDeviceSchedule({
-          actuator_id: device.id,
-          target_level: 0,
-          schedule_at: new Date(
-            getNextDateTimeRange(
-              matchedTemplate.onTime,
-              matchedTemplate.offTime,
-            ),
-          ).toISOString(),
-          note: `${matchedTemplate.note} - Tắt (${device.name})`,
-        });
-
-        return {
-          success: offResult.success,
-          deviceName: device.name,
-          reason: offResult.error,
-        };
       }),
     );
 
@@ -879,6 +941,12 @@ export const DieuKhien: React.FC = () => {
 
     const dbSchedules = await getDeviceSchedules();
     setSchedules(dbSchedules);
+
+    // Reset zone and date selections
+    setSelectedZoneIds([]);
+    setStartDate("");
+    setEndDate("");
+    setRepeatDaily(false);
 
     if (failedResults.length > 0) {
       alert(
@@ -898,28 +966,95 @@ export const DieuKhien: React.FC = () => {
   };
 
   const handleCreateSchedule = async () => {
-    if (!selectedScheduleDeviceId || !scheduleAt) {
-      alert("Vui lòng chọn thiết bị và thời gian lập lịch");
+    if (!scheduleAt) {
+      alert("Vui lòng chọn thời gian lập lịch");
       return;
     }
 
     setIsScheduleSubmitting(true);
-    const result = await createDeviceSchedule({
-      actuator_id: selectedScheduleDeviceId,
-      target_level: Number(scheduleLevel),
-      schedule_at: new Date(scheduleAt).toISOString(),
-      note: scheduleNote || undefined,
-    });
+
+    // Determine target devices: if zones selected, target devices are those in selected zones,
+    // otherwise target the single selectedScheduleDeviceId
+    let targetDevices = [] as any[];
+    if (selectedZoneIds.length > 0) {
+      targetDevices = devices.filter((d) =>
+        selectedZoneIds.includes(d.zone_id),
+      );
+    } else if (selectedScheduleDeviceId) {
+      const match = devices.find((d) => d.id === selectedScheduleDeviceId);
+      if (match) targetDevices = [match];
+    }
+
+    if (targetDevices.length === 0) {
+      setIsScheduleSubmitting(false);
+      alert(
+        "Không tìm thấy thiết bị nào để áp dụng lịch (kiểm tra lựa chọn ao/thiết bị)",
+      );
+      return;
+    }
+
+    // Build schedule datetimes using start/end date and repeat option
+    const createdResults: Array<{
+      success: boolean;
+      error?: string;
+      deviceId?: string;
+    }> = [];
+
+    const timePart = new Date(scheduleAt).toISOString().slice(11, 19); // HH:MM:SS
+
+    const datesToApply: string[] = [];
+
+    if (repeatDaily && startDate && endDate) {
+      // generate inclusive date range
+      let cur = new Date(startDate);
+      const last = new Date(endDate);
+      while (cur <= last) {
+        datesToApply.push(cur.toISOString().slice(0, 10));
+        cur.setDate(cur.getDate() + 1);
+      }
+    } else if (startDate) {
+      datesToApply.push(startDate);
+    } else {
+      datesToApply.push(new Date(scheduleAt).toISOString().slice(0, 10));
+    }
+
+    const tasks: Promise<any>[] = [];
+
+    for (const dev of targetDevices) {
+      for (const dateStr of datesToApply) {
+        const iso = new Date(`${dateStr}T${timePart}`).toISOString();
+        tasks.push(
+          createDeviceSchedule({
+            actuator_id: dev.id,
+            target_level: Number(scheduleLevel),
+            schedule_at: iso,
+            note: scheduleNote || undefined,
+          })
+            .then((r) => ({ success: r.success, deviceId: dev.id }))
+            .catch((e) => ({
+              success: false,
+              error: e?.message || String(e),
+              deviceId: dev.id,
+            })),
+        );
+      }
+    }
+
+    const results = await Promise.all(tasks);
     setIsScheduleSubmitting(false);
 
-    if (!result.success) {
-      alert(`Không thể tạo lịch: ${result.error}`);
-      return;
+    const failed = results.filter((r: any) => !r.success);
+    if (failed.length > 0) {
+      alert(
+        `Một số lịch tạo thất bại: ${failed.map((f: any) => f.deviceId).join(", ")}`,
+      );
     }
 
     const dbSchedules = await getDeviceSchedules();
     setSchedules(dbSchedules);
     setScheduleNote("");
+    setSelectedDates([]);
+    setSelectedZoneIds([]);
   };
 
   const handleCancelSchedule = async (scheduleId: string) => {
@@ -1029,6 +1164,17 @@ export const DieuKhien: React.FC = () => {
         onCancelSchedule={handleCancelSchedule}
         deviceTypeLabels={DEVICE_TYPE_LABELS}
         getActionLabelByType={getActionLabelByType}
+        zones={zones}
+        selectedZoneIds={selectedZoneIds}
+        onSelectedZoneIdsChange={setSelectedZoneIds}
+        startDate={startDate}
+        endDate={endDate}
+        onStartDateChange={setStartDate}
+        onEndDateChange={setEndDate}
+        repeatDaily={repeatDaily}
+        onRepeatDailyChange={setRepeatDaily}
+        scheduleMode={scheduleMode}
+        onScheduleModeChange={setScheduleMode}
       />
 
       <GhiLog commandLogs={commandLogs} />

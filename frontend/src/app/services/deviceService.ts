@@ -65,6 +65,8 @@ export const getAllDevices = async () => {
         isOnline: true, // Mặc định true vì đã lấy được từ DB
         mode: dbDev.mode ? dbDev.mode.toLowerCase() : "manual",
         lastUpdated: dbDev.updated_at || new Date().toISOString(),
+        // Nếu DB có liên kết zone/ao, giữ nguyên trường để frontend có thể lọc theo ao
+        zone_id: dbDev.zone_id || null,
       };
     });
   } catch (error) {
@@ -123,8 +125,17 @@ export const getDeviceLogs = async (
     if (actuatorId) query.set("actuatorId", actuatorId);
 
     const response = await fetch(`${API_URL}/devices/logs?${query.toString()}`);
-    if (!response.ok) throw new Error("Không lấy được logs thiết bị");
-    return await response.json();
+    if (!response.ok) {
+      console.error(
+        "[FE] Response not ok:",
+        response.status,
+        response.statusText,
+      );
+      throw new Error("Không lấy được logs thiết bị");
+    }
+    const data = await response.json();
+    console.log("[FE] Device logs fetched:", data);
+    return data;
   } catch (error) {
     console.error("[FE] Lỗi lấy logs thiết bị:", error);
     return [];
