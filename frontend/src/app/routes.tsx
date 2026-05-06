@@ -30,18 +30,20 @@ import { MainLayout } from "./components/layout/MainLayout";
 import { PrivateRoute } from "./components/common/PrivateRoute";
 
 // Pages
-import { Login } from "./pages/auth/Login";
-import { Dashboard } from "./pages/dashboard/Dashboard";
-import { DieuKhien } from "./pages/control/DieuKhien";
-import { DeviceLogsPage } from "./pages/logs/DeviceLogsPage";
-import { CanhBao } from "./pages/alerts/CanhBao";
-import { BaoCao } from "./pages/reports/BaoCao";
-import { Chatbot } from "./pages/chatbot/Chatbot";
-import { ZonesPage } from "./pages/admin/ZonesPage";
-import { UsersPage } from "./pages/admin/UsersPage";
-import { ActivityLogsPage } from "./pages/admin/ActivityLogsPage";
-import { MonitoringPage } from "./pages/monitoring/MonitoringPage";
-import { NotFound } from "./pages/NotFound";
+import { Login } from './pages/auth/Login';
+import { Dashboard } from './pages/dashboard/Dashboard';
+import { DieuKhien } from './pages/control/DieuKhien';
+import { CanhBao } from './pages/alerts/CanhBao';
+import { BaoCao } from './pages/reports/BaoCao';
+import { Chatbot } from './pages/chatbot/Chatbot';
+import { ZonesPage } from './pages/admin/ZonesPage';
+import { ZoneDetailPage } from './pages/admin/ZoneDetailPage';
+import { UsersPage } from './pages/admin/UsersPage';
+import { ActivityLogsPage } from './pages/admin/ActivityLogsPage';
+import { AlertsPage } from './pages/admin/AlertsPage';
+import { MonitoringPage } from './pages/monitoring/MonitoringPage';
+import { NotFound } from './pages/NotFound';
+import { DeviceLogsPage } from './pages/logs/DeviceLogsPage';
 
 // Placeholder components cho các trang chưa hoàn thiện
 const PlaceholderPage: React.FC<{ title: string; icon?: string }> = ({
@@ -106,19 +108,12 @@ export const router = createBrowserRouter([
             element: <PrivateRoute requiredRole="admin" />,
             children: [
               { index: true, element: <Navigate to="/admin/zones" replace /> },
-              { path: "zones", element: <ZonesPage /> },
-              {
-                path: "ponds",
-                element: <PlaceholderPage title="Quản Lý Ao Nuôi" icon="🐟" />,
-              },
-              {
-                path: "devices",
-                element: (
-                  <PlaceholderPage title="Quản Lý Thiết Bị IoT" icon="⚡" />
-                ),
-              },
-              { path: "users", element: <UsersPage /> },
-              { path: "logs", element: <ActivityLogsPage /> },
+              { path: 'zones', element: <ZonesPage /> },
+              { path: 'zones/:zoneId', element: <ZoneDetailPage /> },
+              { path: 'devices', element: <PlaceholderPage title="Quản Lý Thiết Bị IoT" icon="⚡" /> },
+              { path: 'users', element: <UsersPage /> },
+              { path: 'alerts', element: <AlertsPage /> },
+              { path: 'logs', element: <ActivityLogsPage /> },
             ],
           },
 

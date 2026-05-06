@@ -76,4 +76,11 @@ export const api = {
       method:  'DELETE',
       headers: buildHeaders(),
     }).then((r) => parseResponse<T>(r)),
+
+  patch: <T>(path: string, body?: unknown): Promise<T> =>
+    fetch(`${API_BASE}${path}`, {
+      method:  'PATCH',
+      headers: buildHeaders(),
+      body:    body !== undefined ? JSON.stringify(body) : undefined,
+    }).then((r) => parseResponse<T>(r)),
 };

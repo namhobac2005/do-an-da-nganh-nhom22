@@ -13,10 +13,11 @@ import scheduleRoutes from './routes/schedule.route.ts';
 import reportRoutes from './routes/report.route.ts';
 import dashboardRoutes from './routes/dashboard.route.ts';
 
-import authRoutes from './routes/auth.route.js';
-import userRoutes from './routes/user.route.js';
-import zoneRoutes from './routes/zone.route.js';
-import logRoutes from './routes/log.route.js';
+import authRoutes  from './routes/auth.route.js';
+import userRoutes  from './routes/user.route.js';
+import zoneRoutes  from './routes/zone.route.js';
+import logRoutes   from './routes/log.route.js';
+import alertRoutes from './routes/alert.route.js';
 dotenv.config();
 
 const app = express();
@@ -43,10 +44,11 @@ setInterval(() => {
 }, 5000);
 
 // ================= USER MANAGEMENT API =================
-app.use('/auth', authRoutes);
-app.use('/admin/users', userRoutes);
-app.use('/admin/zones', zoneRoutes);
-app.use('/admin/logs', logRoutes);
+app.use('/auth',         authRoutes);
+app.use('/admin/users',  userRoutes);
+app.use('/admin/zones',  zoneRoutes);
+app.use('/admin/logs',   logRoutes);
+app.use('/admin/alerts', alertRoutes);
 
 // ================= START =================
 initMQTT();
