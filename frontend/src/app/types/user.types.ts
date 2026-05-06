@@ -10,11 +10,26 @@ export type UserStatus = 'active' | 'inactive';
 export type ZoneStatus = 'active' | 'inactive' | 'maintenance';
 
 export interface Zone {
-  id:         string;
-  name:       string;
-  location:   string | null;
-  status:     ZoneStatus;
-  created_at: string;
+  id:           string;
+  name:         string;
+  location:     string | null;
+  farming_type: string | null;
+  status:       ZoneStatus;
+  created_at:   string;
+}
+
+export interface CreateZoneDto {
+  name:          string;
+  location?:     string;
+  farming_type?: string;
+  status?:       ZoneStatus;
+}
+
+export interface UpdateZoneDto {
+  name?:         string;
+  location?:     string;
+  farming_type?: string;
+  status?:       ZoneStatus;
 }
 
 export interface UserProfile {

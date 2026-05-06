@@ -10,6 +10,7 @@
  */
 
 import { RouterProvider } from 'react-router';
+import { Toaster } from 'sonner';
 import { AuthProvider } from './context/AuthContext';
 import { router } from './routes';
 
@@ -21,6 +22,12 @@ export default function App() {
      */
     <AuthProvider>
       <RouterProvider router={router} />
+      <Toaster
+        position="top-right"
+        richColors
+        closeButton
+        toastOptions={{ duration: 4000 }}
+      />
     </AuthProvider>
   );
 }

@@ -53,66 +53,24 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: "QUẢN TRỊ HỆ THỐNG",
     items: [
-      {
-        path: "/admin/zones",
-        label: "Vùng Ao (Zone)",
-        icon: <Waves size={18} />,
-        adminOnly: true,
-      },
-      {
-        path: "/admin/ponds",
-        label: "Ao Nuôi",
-        icon: <Fish size={18} />,
-        adminOnly: true,
-      },
-      {
-        path: "/admin/devices",
-        label: "Thiết Bị",
-        icon: <Cpu size={18} />,
-        adminOnly: true,
-      },
-      {
-        path: "/admin/users",
-        label: "Tài Khoản",
-        icon: <Users size={18} />,
-        adminOnly: true,
-      },
+      { path: '/admin/zones', label: 'Vùng Ao (Zone)', icon: <Waves size={18} />, adminOnly: true },
+      { path: '/admin/devices', label: 'Thiết Bị', icon: <Cpu size={18} />, adminOnly: true },
+      { path: '/admin/users', label: 'Tài Khoản', icon: <Users size={18} />, adminOnly: true },
+      { path: '/admin/alerts', label: 'Cảnh Báo & Ngưỡng', icon: <BellRing size={18} />, adminOnly: true },
+      { path: '/admin/logs', label: 'Nhật Ký Hành Động', icon: <Activity size={18} />, adminOnly: true },
     ],
   },
   {
     title: "GIÁM SÁT & VẬN HÀNH",
     items: [
-      {
-        path: "/monitoring",
-        label: "Giám Sát Real-time",
-        icon: <Gauge size={18} />,
-      },
-      {
-        path: "/control",
-        label: "Điều Khiển Thiết Bị",
-        icon: <Zap size={18} />,
-      },
-      {
-        path: "/device-logs",
-        label: "Nhật Ký Điều Khiển",
-        icon: <FileText size={18} />,
-      },
+      { path: "/monitoring", label: "Giám Sát Real-time", icon: <Gauge size={18} /> },
+      { path: "/control", label: "Điều Khiển Thiết Bị", icon: <Zap size={18} /> },
     ],
   },
   {
-    title: "BÁO CÁO & CẢNH BÁO",
+    title: "BÁO CÁO",
     items: [
-      {
-        path: "/alerts",
-        label: "Cảnh Báo",
-        icon: <BellRing size={18} />,
-        badge: 3,
-      },
-      {
-        path: "/reports",
-        label: "Báo Cáo & Thống Kê",
-        icon: <BarChart3 size={18} />,
-      },
+      { path: "/reports", label: "Báo Cáo & Thống Kê", icon: <BarChart3 size={18} /> },
     ],
   },
   {
@@ -205,10 +163,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                         className={`
                           flex items-center gap-3 px-3 py-2.5 rounded-lg
                           transition-all duration-150 group relative
-                          ${
-                            isActive(item.path)
-                              ? "bg-emerald-500 text-white shadow-lg shadow-emerald-900/30"
-                              : "text-white/70 hover:bg-white/10 hover:text-white"
+                          ${isActive(item.path)
+                            ? "bg-emerald-500 text-white shadow-lg shadow-emerald-900/30"
+                            : "text-white/70 hover:bg-white/10 hover:text-white"
                           }
                         `}
                       >
