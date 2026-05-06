@@ -82,18 +82,26 @@ export const controlDevice = async (
 export const getDeviceLogs = async (
   limit: number = 50,
   actuatorId?: string,
+  from?: string,
+  to?: string,
 ) => {
   try {
     let query = supabase
       .from("actuator_logs")
       .select(
-        "id, actuator_id, action, mode, status, user_id, created_at, actuators(name, type)",
+        "id, actuator_id, action, mode, status, user_id, timestamp, actuators(name, type)",
       )
-      .order("created_at", { ascending: false })
+      .order("timestamp", { ascending: false })
       .limit(limit);
 
     if (actuatorId) {
       query = query.eq("actuator_id", actuatorId);
+    }
+    if (from) {
+      query = query.gte("timestamp", from);
+    }
+    if (to) {
+      query = query.lte("timestamp", to);
     }
 
     const { data, error } = await query;
@@ -103,20 +111,32 @@ export const getDeviceLogs = async (
       // Fallback: fetch logs without the join if join fails
       let fallbackQuery = supabase
         .from("actuator_logs")
-        .select("id, actuator_id, action, mode, status, user_id, created_at")
-        .order("created_at", { ascending: false })
+        .select("id, actuator_id, action, mode, status, user_id, timestamp")
+        .order("timestamp", { ascending: false })
         .limit(limit);
 
       if (actuatorId) {
         fallbackQuery = fallbackQuery.eq("actuator_id", actuatorId);
       }
+      if (from) {
+        fallbackQuery = fallbackQuery.gte("timestamp", from);
+      }
+      if (to) {
+        fallbackQuery = fallbackQuery.lte("timestamp", to);
+      }
 
       const { data: fallbackData, error: fallbackError } = await fallbackQuery;
       if (fallbackError) throw new Error(fallbackError.message);
-      return fallbackData || [];
+      return (fallbackData || []).map((item: any) => ({
+        ...item,
+        created_at: item.created_at || item.timestamp || null,
+      }));
     }
 
-    return data || [];
+    return (data || []).map((item: any) => ({
+      ...item,
+      created_at: item.created_at || item.timestamp || null,
+    }));
   } catch (error: any) {
     console.error("[Backend] Error in getDeviceLogs:", error);
     throw new Error(error.message);

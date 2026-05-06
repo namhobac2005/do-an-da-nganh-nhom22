@@ -46,7 +46,9 @@ export const getDeviceLogs = async (req: Request, res: Response) => {
       ? parseInt(req.query.limit as string, 10)
       : 50;
     const actuatorId = req.query.actuatorId as string | undefined;
-    const logs = await deviceService.getDeviceLogs(limit, actuatorId);
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+    const logs = await deviceService.getDeviceLogs(limit, actuatorId, from, to);
     res.status(200).json(logs);
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
