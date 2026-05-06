@@ -119,10 +119,14 @@ export const sendDeviceCommand = async (
 export const getDeviceLogs = async (
   limit: number = 30,
   actuatorId?: string,
+  from?: string,
+  to?: string,
 ): Promise<DeviceLog[]> => {
   try {
     const query = new URLSearchParams({ limit: String(limit) });
     if (actuatorId) query.set("actuatorId", actuatorId);
+    if (from) query.set("from", from);
+    if (to) query.set("to", to);
 
     const response = await fetch(`${API_URL}/devices/logs?${query.toString()}`);
     if (!response.ok) {

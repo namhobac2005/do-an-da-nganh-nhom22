@@ -22,16 +22,13 @@ import {
 } from "lucide-react";
 import { Switch } from "../../components/ui/switch";
 import { LapLich } from "./LapLich";
-import { GhiLog } from "./GhiLog";
 import {
   sendDeviceCommand,
   getAllDevices,
-  getDeviceLogs,
   getDeviceSchedules,
   createDeviceSchedule,
   cancelDeviceSchedule,
   type DeviceSchedule,
-  type DeviceLog,
   type SendCommandResult,
 } from "../../services/deviceService";
 import { getZones } from "../../services/zoneService";
@@ -623,7 +620,6 @@ export const DieuKhien: React.FC = () => {
   }>({ isOpen: false, device: null, newLevel: 0 });
 
   const [loadingDeviceId, setLoadingDeviceId] = useState<string | null>(null);
-  const [commandLogs, setCommandLogs] = useState<DeviceLog[]>([]);
   const [schedules, setSchedules] = useState<DeviceSchedule[]>([]);
   const [zones, setZones] = useState<{ id: string; name: string }[]>([]);
   const [selectedZoneIds, setSelectedZoneIds] = useState<string[]>([]);
@@ -689,17 +685,13 @@ export const DieuKhien: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const fetchLogsAndSchedules = async () => {
-      const [dbLogs, dbSchedules] = await Promise.all([
-        getDeviceLogs(40),
-        getDeviceSchedules(),
-      ]);
-      setCommandLogs(dbLogs);
+    const fetchSchedules = async () => {
+      const dbSchedules = await getDeviceSchedules();
       setSchedules(dbSchedules);
     };
 
-    fetchLogsAndSchedules();
-    const interval = setInterval(fetchLogsAndSchedules, 8000);
+    fetchSchedules();
+    const interval = setInterval(fetchSchedules, 8000);
     return () => clearInterval(interval);
   }, []);
 
@@ -766,8 +758,6 @@ export const DieuKhien: React.FC = () => {
               : d,
           ),
         );
-        const dbLogs = await getDeviceLogs(40);
-        setCommandLogs(dbLogs);
       } else {
         alert(`Lỗi gửi lệnh lên hệ thống: ${result.error}`);
       }
@@ -814,9 +804,6 @@ export const DieuKhien: React.FC = () => {
         };
       }),
     );
-
-    const dbLogs = await getDeviceLogs(40);
-    setCommandLogs(dbLogs);
   };
 
   useEffect(() => {
@@ -1176,8 +1163,6 @@ export const DieuKhien: React.FC = () => {
         scheduleMode={scheduleMode}
         onScheduleModeChange={setScheduleMode}
       />
-
-      <GhiLog commandLogs={commandLogs} />
 
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
