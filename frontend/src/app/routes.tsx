@@ -43,6 +43,7 @@ import { ActivityLogsPage } from './pages/admin/ActivityLogsPage';
 import { AlertsPage } from './pages/admin/AlertsPage';
 import { MonitoringPage } from './pages/monitoring/MonitoringPage';
 import { NotFound } from './pages/NotFound';
+import { DeviceLogsPage } from './pages/logs/DeviceLogsPage';
 
 // Placeholder components cho các trang chưa hoàn thiện
 const PlaceholderPage: React.FC<{ title: string; icon?: string }> = ({
