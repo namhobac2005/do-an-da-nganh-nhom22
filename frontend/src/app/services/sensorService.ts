@@ -1,4 +1,12 @@
 // src/services/sensorService.ts
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('accessToken');
+  return {
+    'Content-Type': 'application/json',
+    Authorization: token ? `Bearer ${token}` : '',
+  };
+};
+
 const API_URL = 'http://localhost:5000';
 export interface Zone {
   id: string;
@@ -31,7 +39,10 @@ export interface HistoryRecord {
 // 1. Lấy danh sách Zone (HÀM ĐANG BỊ THIẾU GÂY RA LỖI)
 export const getZones = async (): Promise<Zone[]> => {
   try {
-    const response = await fetch(`${API_URL}/sensors/zones`);
+    const response = await fetch(`${API_URL}/sensors/zones`, {
+      method: 'GET', // Phải khai báo method
+      headers: getAuthHeaders(), // THÊM DÒNG NÀY ĐỂ ĐƯA TOKEN CHO BACKEND
+    });
     if (!response.ok) throw new Error('Lỗi fetch zones');
     return await response.json();
   } catch (error) {
@@ -43,7 +54,10 @@ export const getZones = async (): Promise<Zone[]> => {
 // 2. Lấy danh sách Pond theo Zone
 export const getPondsByZone = async (zoneId: string): Promise<Pond[]> => {
   try {
-    const response = await fetch(`${API_URL}/sensors/zones/${zoneId}/ponds`);
+    const response = await fetch(`${API_URL}/sensors/zones/${zoneId}/ponds`, {
+      method: 'GET', // Phải khai báo method
+      headers: getAuthHeaders(), // THÊM DÒNG NÀY ĐỂ ĐƯA TOKEN CHO BACKEND
+    });
     if (!response.ok) throw new Error('Lỗi fetch ponds');
     return await response.json();
   } catch (error) {
@@ -57,7 +71,10 @@ export const getLatestSensors = async (
   pondId: string,
 ): Promise<SensorData[]> => {
   try {
-    const response = await fetch(`${API_URL}/sensors/latest?pondId=${pondId}`);
+    const response = await fetch(`${API_URL}/sensors/latest?pondId=${pondId}`, {
+      method: 'GET', // Phải khai báo method
+      headers: getAuthHeaders(), // THÊM DÒNG NÀY ĐỂ ĐƯA TOKEN CHO BACKEND
+    });
     if (!response.ok) throw new Error('Lỗi fetch latest sensors');
     return await response.json();
   } catch (error) {
@@ -74,6 +91,10 @@ export const getSensorHistory = async (
   try {
     const response = await fetch(
       `${API_URL}/sensors/history?pondId=${pondId}&limit=${limit}`,
+      {
+        method: 'GET', // Phải khai báo method
+        headers: getAuthHeaders(), // THÊM DÒNG NÀY ĐỂ ĐƯA TOKEN CHO BACKEND
+      },
     );
     if (!response.ok) throw new Error('Lỗi fetch history');
     return await response.json();

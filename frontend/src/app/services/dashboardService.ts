@@ -1,6 +1,13 @@
 // src/services/dashboardService.ts
 const API_URL = 'http://localhost:5000';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('accessToken');
+  return {
+    'Content-Type': 'application/json',
+    Authorization: token ? `Bearer ${token}` : '',
+  };
+};
 export interface DashboardKPIs {
   totalZones: number;
   totalPonds: number;
@@ -35,7 +42,10 @@ export interface ZoneOverview {
  */
 export const getKPIs = async (): Promise<DashboardKPIs | null> => {
   try {
-    const response = await fetch(`${API_URL}/dashboard/kpis`);
+    const response = await fetch(`${API_URL}/dashboard/kpis`, {
+      method: 'GET', // Phải khai báo method
+      headers: getAuthHeaders(), // THÊM DÒNG NÀY ĐỂ ĐƯA TOKEN CHO BACKEND
+    });
     if (!response.ok) throw new Error('Lỗi fetch KPIs');
     return await response.json();
   } catch (error) {
@@ -53,6 +63,10 @@ export const getRecentAlerts = async (
   try {
     const response = await fetch(
       `${API_URL}/dashboard/alerts/recent?limit=${limit}`,
+      {
+        method: 'GET', // Phải khai báo method
+        headers: getAuthHeaders(), // THÊM DÒNG NÀY ĐỂ ĐƯA TOKEN CHO BACKEND
+      },
     );
     if (!response.ok) throw new Error('Lỗi fetch alerts');
     return await response.json();
@@ -67,7 +81,10 @@ export const getRecentAlerts = async (
  */
 export const getZonesOverview = async (): Promise<ZoneOverview[]> => {
   try {
-    const response = await fetch(`${API_URL}/dashboard/zones-overview`);
+    const response = await fetch(`${API_URL}/dashboard/zones-overview`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error('Lỗi fetch zones overview');
     return await response.json();
   } catch (error) {

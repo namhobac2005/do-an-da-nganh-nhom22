@@ -12,29 +12,57 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router';
 import {
-  ArrowLeft, Waves, MapPin, Fish, RefreshCw,
-  Activity, Cpu, Bell, LayoutGrid, AlertCircle, Loader2,
+  ArrowLeft,
+  Waves,
+  MapPin,
+  Fish,
+  RefreshCw,
+  Activity,
+  Cpu,
+  Bell,
+  LayoutGrid,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import * as zoneService from '../../services/zoneService';
 import type { Zone } from '../../types/user.types';
 
 // ===== STATUS CONFIG =====
 const STATUS_CONFIG = {
-  active:      { label: 'Hoạt động',    bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500' },
-  inactive:    { label: 'Ngưng HĐ',     bg: 'bg-gray-100',    text: 'text-gray-600',    dot: 'bg-gray-400'    },
-  maintenance: { label: 'Bảo trì',      bg: 'bg-amber-100',   text: 'text-amber-700',   dot: 'bg-amber-500'   },
+  active: {
+    label: 'Hoạt động',
+    bg: 'bg-emerald-100',
+    text: 'text-emerald-700',
+    dot: 'bg-emerald-500',
+  },
+  inactive: {
+    label: 'Ngưng HĐ',
+    bg: 'bg-gray-100',
+    text: 'text-gray-600',
+    dot: 'bg-gray-400',
+  },
+  maintenance: {
+    label: 'Bảo trì',
+    bg: 'bg-amber-100',
+    text: 'text-amber-700',
+    dot: 'bg-amber-500',
+  },
 };
 
 // ===== PLACEHOLDER SECTION =====
 interface PlaceholderSectionProps {
-  icon:        React.ReactNode;
-  title:       string;
+  icon: React.ReactNode;
+  title: string;
   description: string;
-  team:        string;
-  color:       string;
+  team: string;
+  color: string;
 }
 const PlaceholderSection: React.FC<PlaceholderSectionProps> = ({
-  icon, title, description, team, color,
+  icon,
+  title,
+  description,
+  team,
+  color,
 }) => (
   <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
     <div className={`${color} px-5 py-3.5 flex items-center gap-2`}>
@@ -50,7 +78,9 @@ const PlaceholderSection: React.FC<PlaceholderSectionProps> = ({
         Phụ trách: <span className="font-medium text-gray-400">{team}</span>
       </p>
       <div className="mt-4 px-3 py-1.5 bg-gray-50 border border-dashed border-gray-200 rounded-lg">
-        <p className="text-gray-400 text-xs font-mono">{'// TODO: plug in component here'}</p>
+        <p className="text-gray-400 text-xs font-mono">
+          {'// TODO: plug in component here'}
+        </p>
       </div>
     </div>
   </div>
@@ -58,12 +88,12 @@ const PlaceholderSection: React.FC<PlaceholderSectionProps> = ({
 
 // ===== MAIN PAGE =====
 export const ZoneDetailPage: React.FC = () => {
-  const { zoneId }   = useParams<{ zoneId: string }>();
-  const navigate     = useNavigate();
+  const { zoneId } = useParams<{ zoneId: string }>();
+  const navigate = useNavigate();
 
-  const [zone,      setZone]      = useState<Zone | null>(null);
+  const [zone, setZone] = useState<Zone | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error,     setError]     = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchZone = async () => {
     if (!zoneId) return;
@@ -79,7 +109,9 @@ export const ZoneDetailPage: React.FC = () => {
     }
   };
 
-  useEffect(() => { fetchZone(); }, [zoneId]);
+  useEffect(() => {
+    fetchZone();
+  }, [zoneId]);
 
   // ===== LOADING =====
   if (isLoading) {
@@ -95,7 +127,9 @@ export const ZoneDetailPage: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center py-24 bg-white rounded-2xl border border-gray-100">
         <AlertCircle size={32} className="text-red-400 mb-3" />
-        <p className="text-gray-600 text-sm font-medium mb-1">Không tìm thấy vùng ao</p>
+        <p className="text-gray-600 text-sm font-medium mb-1">
+          Không tìm thấy vùng ao
+        </p>
         <p className="text-gray-400 text-xs mb-4">{error}</p>
         <div className="flex gap-2">
           <button
@@ -123,7 +157,12 @@ export const ZoneDetailPage: React.FC = () => {
     <div className="space-y-5">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-gray-400">
-        <Link to="/admin/zones" className="hover:text-gray-600 transition-colors">Vùng ao</Link>
+        <Link
+          to="/admin/zones"
+          className="hover:text-gray-600 transition-colors"
+        >
+          Vùng ao
+        </Link>
         <span>/</span>
         <span className="text-gray-700 font-medium">{zone.name}</span>
       </nav>
@@ -137,18 +176,24 @@ export const ZoneDetailPage: React.FC = () => {
               <Waves size={28} className="text-white" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-white text-xl font-bold truncate">{zone.name}</h1>
+              <h1 className="text-white text-xl font-bold truncate">
+                {zone.name}
+              </h1>
               <div className="flex flex-wrap items-center gap-3 mt-1">
                 {zone.location && (
                   <div className="flex items-center gap-1">
                     <MapPin size={12} className="text-emerald-200" />
-                    <span className="text-emerald-200 text-xs">{zone.location}</span>
+                    <span className="text-emerald-200 text-xs">
+                      {zone.location}
+                    </span>
                   </div>
                 )}
                 {zone.farming_type && (
                   <div className="flex items-center gap-1">
                     <Fish size={12} className="text-emerald-200" />
-                    <span className="text-emerald-200 text-xs">{zone.farming_type}</span>
+                    <span className="text-emerald-200 text-xs">
+                      {zone.farming_type}
+                    </span>
                   </div>
                 )}
               </div>
@@ -157,7 +202,9 @@ export const ZoneDetailPage: React.FC = () => {
 
           {/* Right side: status + back button */}
           <div className="flex items-center gap-3 shrink-0">
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.text}`}>
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.text}`}
+            >
               <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
               {cfg.label}
             </span>
@@ -182,8 +229,15 @@ export const ZoneDetailPage: React.FC = () => {
 
         {/* Zone meta row */}
         <div className="bg-black/10 px-6 py-2.5 flex gap-6 text-xs text-emerald-100">
-          <span>ID: <span className="font-mono">{zone.id.slice(0, 8)}…</span></span>
-          <span>Tạo ngày: <span className="font-medium">{new Date(zone.created_at).toLocaleDateString('vi-VN')}</span></span>
+          <span>
+            ID: <span className="font-mono">{zone.id.slice(0, 8)}…</span>
+          </span>
+          <span>
+            Tạo ngày:{' '}
+            <span className="font-medium">
+              {new Date(zone.created_at).toLocaleDateString('vi-VN')}
+            </span>
+          </span>
         </div>
       </div>
 
@@ -192,15 +246,44 @@ export const ZoneDetailPage: React.FC = () => {
       {/* Overview quick-stat strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Ao nuôi',       value: '—', icon: <LayoutGrid size={18} />, bg: 'bg-blue-50',    text: 'text-blue-700'    },
-          { label: 'Thiết bị',      value: '—', icon: <Cpu       size={18} />, bg: 'bg-purple-50',  text: 'text-purple-700'  },
-          { label: 'Cảm biến',      value: '—', icon: <Activity  size={18} />, bg: 'bg-teal-50',    text: 'text-teal-700'    },
-          { label: 'Cảnh báo hôm nay', value: '—', icon: <Bell  size={18} />, bg: 'bg-amber-50',   text: 'text-amber-700'   },
+          {
+            label: 'Ao nuôi',
+            value: '—',
+            icon: <LayoutGrid size={18} />,
+            bg: 'bg-blue-50',
+            text: 'text-blue-700',
+          },
+          {
+            label: 'Thiết bị',
+            value: '—',
+            icon: <Cpu size={18} />,
+            bg: 'bg-purple-50',
+            text: 'text-purple-700',
+          },
+          {
+            label: 'Cảm biến',
+            value: '—',
+            icon: <Activity size={18} />,
+            bg: 'bg-teal-50',
+            text: 'text-teal-700',
+          },
+          {
+            label: 'Cảnh báo hôm nay',
+            value: '—',
+            icon: <Bell size={18} />,
+            bg: 'bg-amber-50',
+            text: 'text-amber-700',
+          },
         ].map(({ label, value, icon, bg, text }) => (
-          <div key={label} className={`${bg} rounded-2xl p-4 flex items-center gap-3`}>
+          <div
+            key={label}
+            className={`${bg} rounded-2xl p-4 flex items-center gap-3`}
+          >
             <div className={`${text} opacity-70`}>{icon}</div>
             <div>
-              <p className={`${text} text-xl font-bold leading-tight`}>{value}</p>
+              <p className={`${text} text-xl font-bold leading-tight`}>
+                {value}
+              </p>
               <p className="text-gray-500 text-xs mt-0.5">{label}</p>
             </div>
           </div>

@@ -1,73 +1,46 @@
-/**
- * auth.service.ts
- * Handles authentication: sign-in via Supabase, profile fetch, JWT signing.
- */
-
+import { createClient } from '@supabase/supabase-js';
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { supabase } from '../lib/supabase.client.ts';
+import 'dotenv/config';
+// Khởi tạo Supabase client kết nối với database của bạn
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-export interface LoginResult {
-  token: string;
-  user: {
-    id:       string;
-    email:    string;
-    role:     'admin' | 'user';
-    fullName: string | null;
-    phone:    string | null;
-    status:   string;
-  };
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key';
+
+export class AuthService {
+  static async login(email: string, password: string) {
+    // 1. Tìm user trong bảng public.users
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
+
+    if (error || !user) {
+      throw new Error('Email không tồn tại trong hệ thống');
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      throw new Error('Mật khẩu không chính xác');
+    }
+
+    // 3. Tạo JWT Token
+    const token = jwt.sign(
+      { id: user.id, role: user.role, email: user.email },
+      JWT_SECRET,
+      { expiresIn: '1d' }, // Token hết hạn sau 1 ngày
+    );
+
+    // Xóa password trước khi trả về cho client
+    const { password: _, ...userWithoutPassword } = user;
+
+    return {
+      user: userWithoutPassword,
+      token,
+    };
+  }
 }
-
-/**
- * Authenticates a user via Supabase Auth and returns a signed JWT
- * containing { id, email, role } for use by backend middleware.
- */
-export const login = async (email: string, password: string): Promise<LoginResult> => {
-  // 1. Authenticate against Supabase Auth
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-
-  if (authError || !authData.user) {
-    throw new Error('Email hoặc mật khẩu không đúng.');
-  }
-
-  const authUser = authData.user;
-
-  // 2. Fetch profile (role, status, etc.)
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', authUser.id)
-    .single();
-
-  if (profileError || !profile) {
-    throw new Error('Không tìm thấy thông tin tài khoản. Vui lòng liên hệ Admin.');
-  }
-
-  if (profile.status === 'inactive') {
-    throw new Error('Tài khoản đã bị khóa. Vui lòng liên hệ Admin.');
-  }
-
-  // 3. Sign JWT
-  const payload = {
-    id:    authUser.id,
-    email: authUser.email as string,
-    role:  profile.role as 'admin' | 'user',
-  };
-
-  const token = jwt.sign(payload, process.env.JWT_SECRET as string, { expiresIn: '8h' });
-
-  return {
-    token,
-    user: {
-      id:       authUser.id,
-      email:    authUser.email as string,
-      role:     profile.role,
-      fullName: profile.full_name,
-      phone:    profile.phone,
-      status:   profile.status,
-    },
-  };
-};
