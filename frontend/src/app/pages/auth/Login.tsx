@@ -14,14 +14,16 @@ export const Login: React.FC = () => {
   const location = useLocation();
   const { login, isLoading, error, isAuthenticated, clearError } = useAuth();
 
-  const [email, setEmail] = useState('admin@aquasmart.vn');
-  const [password, setPassword] = useState('Admin@123');
+  const [email, setEmail] = useState('admin@aquaculture.vn');
+  const [password, setPassword] = useState('password123');
   const [showPassword, setShowPassword] = useState(false);
 
   // Nếu đã đăng nhập, redirect về dashboard
   useEffect(() => {
     if (isAuthenticated) {
-      const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
+      const from =
+        (location.state as { from?: { pathname: string } })?.from?.pathname ||
+        '/dashboard';
       navigate(from, { replace: true });
     }
   }, [isAuthenticated, navigate, location]);
@@ -50,7 +52,10 @@ export const Login: React.FC = () => {
             <div className="w-16 h-16 bg-emerald-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Fish size={32} className="text-[#0A3622]" />
             </div>
-            <h1 className="text-white" style={{ fontSize: '22px', fontWeight: 700 }}>
+            <h1
+              className="text-white"
+              style={{ fontSize: '22px', fontWeight: 700 }}
+            >
               AquaSmart
             </h1>
             <p className="text-emerald-200 mt-1" style={{ fontSize: '13px' }}>
@@ -60,7 +65,10 @@ export const Login: React.FC = () => {
 
           {/* Form */}
           <div className="p-8">
-            <h2 className="text-gray-900 mb-6" style={{ fontSize: '20px', fontWeight: 600 }}>
+            <h2
+              className="text-gray-900 mb-6"
+              style={{ fontSize: '20px', fontWeight: 600 }}
+            >
               Đăng nhập
             </h2>
 
@@ -68,18 +76,29 @@ export const Login: React.FC = () => {
               {/* Error Message */}
               {error && (
                 <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg p-3">
-                  <AlertCircle size={16} className="text-red-500 mt-0.5 shrink-0" />
-                  <p className="text-red-700" style={{ fontSize: '13px' }}>{error}</p>
+                  <AlertCircle
+                    size={16}
+                    className="text-red-500 mt-0.5 shrink-0"
+                  />
+                  <p className="text-red-700" style={{ fontSize: '13px' }}>
+                    {error}
+                  </p>
                 </div>
               )}
 
               {/* Email Field */}
               <div>
-                <label className="block text-gray-700 mb-1.5" style={{ fontSize: '13px', fontWeight: 500 }}>
+                <label
+                  className="block text-gray-700 mb-1.5"
+                  style={{ fontSize: '13px', fontWeight: 500 }}
+                >
                   Email
                 </label>
                 <div className="relative">
-                  <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Mail
+                    size={16}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
                   <input
                     type="email"
                     value={email}
@@ -94,11 +113,17 @@ export const Login: React.FC = () => {
 
               {/* Password Field */}
               <div>
-                <label className="block text-gray-700 mb-1.5" style={{ fontSize: '13px', fontWeight: 500 }}>
+                <label
+                  className="block text-gray-700 mb-1.5"
+                  style={{ fontSize: '13px', fontWeight: 500 }}
+                >
                   Mật khẩu
                 </label>
                 <div className="relative">
-                  <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Lock
+                    size={16}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
@@ -120,7 +145,11 @@ export const Login: React.FC = () => {
 
               {/* Forgot Password */}
               <div className="flex justify-end">
-                <button type="button" className="text-emerald-600 hover:underline" style={{ fontSize: '13px' }}>
+                <button
+                  type="button"
+                  className="text-emerald-600 hover:underline"
+                  style={{ fontSize: '13px' }}
+                >
                   Quên mật khẩu?
                 </button>
               </div>
@@ -145,12 +174,18 @@ export const Login: React.FC = () => {
 
             {/* Demo Credentials */}
             <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
-              <p className="text-blue-800 mb-2" style={{ fontSize: '12px', fontWeight: 600 }}>
+              <p
+                className="text-blue-800 mb-2"
+                style={{ fontSize: '12px', fontWeight: 600 }}
+              >
                 🔑 Tài khoản demo:
               </p>
               <div className="space-y-1">
                 <button
-                  onClick={() => { setEmail('admin@aquasmart.vn'); setPassword('Admin@123'); }}
+                  onClick={() => {
+                    setEmail('admin@aquasmart.vn');
+                    setPassword('Admin@123');
+                  }}
                   className="w-full text-left px-3 py-1.5 rounded-lg bg-white hover:bg-blue-50 border border-blue-100 transition-colors"
                 >
                   <p className="text-blue-700" style={{ fontSize: '12px' }}>
@@ -158,7 +193,10 @@ export const Login: React.FC = () => {
                   </p>
                 </button>
                 <button
-                  onClick={() => { setEmail('mai.tran@aquasmart.vn'); setPassword('User@123'); }}
+                  onClick={() => {
+                    setEmail('mai.tran@aquasmart.vn');
+                    setPassword('User@123');
+                  }}
                   className="w-full text-left px-3 py-1.5 rounded-lg bg-white hover:bg-blue-50 border border-blue-100 transition-colors"
                 >
                   <p className="text-blue-700" style={{ fontSize: '12px' }}>

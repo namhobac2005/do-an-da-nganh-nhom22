@@ -54,11 +54,22 @@ export const getLatestSensorsByPond = async (pondId: string) => {
   }));
 };
 
-// Tạm
-export const getAllZones = async () => {
-  const { data, error } = await supabase.from('zones').select('id, name');
+export const getAllZones = async (userId: string) => {
+  if (!userId) throw new Error('Yêu cầu userId để lấy danh sách khu vực');
+
+  const { data, error } = await supabase
+    .from('zones')
+    // Sử dụng !inner join để bắt buộc zone này phải có mặt trong bảng user_zones ứng với userId
+    .select('id, name, user_zones!inner(user_id)')
+    .eq('user_zones.user_id', userId);
+
   if (error) throw error;
-  return data;
+
+  // Format lại dữ liệu bỏ đi cục user_zones dư thừa
+  return data.map((zone) => ({
+    id: zone.id,
+    name: zone.name,
+  }));
 };
 
 export const getPondsByZone = async (zoneId: string) => {

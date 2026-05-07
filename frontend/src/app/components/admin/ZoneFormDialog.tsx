@@ -17,7 +17,6 @@ import type { Zone, CreateZoneDto, UpdateZoneDto } from '../../types/user.types'
 type FormValues = {
   name:         string;
   location:     string;
-  farming_type: string;
   status:       'active' | 'inactive' | 'maintenance';
 };
 
@@ -25,9 +24,7 @@ interface ZoneFormDialogProps {
   open:          boolean;
   onClose:       () => void;
   onSubmit:      (dto: CreateZoneDto | UpdateZoneDto) => Promise<void>;
-  editZone?:     Zone | null;
-  farmingTypes:  string[];        // existing types from the API
-}
+  editZone?:     Zone | null;}
 
 // ===== CREATABLE COMBOBOX =====
 
@@ -129,7 +126,7 @@ const STATUS_OPTIONS = [
 ] as const;
 
 export const ZoneFormDialog: React.FC<ZoneFormDialogProps> = ({
-  open, onClose, onSubmit, editZone, farmingTypes,
+  open, onClose, onSubmit, editZone,
 }) => {
   const isEdit = !!editZone;
 
@@ -144,7 +141,6 @@ export const ZoneFormDialog: React.FC<ZoneFormDialogProps> = ({
     defaultValues: {
       name:         '',
       location:     '',
-      farming_type: '',
       status:       'active',
     },
   });
@@ -154,18 +150,15 @@ export const ZoneFormDialog: React.FC<ZoneFormDialogProps> = ({
     reset({
       name:         editZone?.name         ?? '',
       location:     editZone?.location     ?? '',
-      farming_type: editZone?.farming_type ?? '',
       status:       editZone?.status       ?? 'active',
     });
   }, [open, editZone, reset]);
 
-  const farmingTypeValue = watch('farming_type');
 
   const onValid = async (values: FormValues) => {
     const dto = {
       name:         values.name.trim(),
       location:     values.location.trim()     || undefined,
-      farming_type: values.farming_type.trim() || undefined,
       status:       values.status,
     };
     await onSubmit(dto);
@@ -235,20 +228,6 @@ export const ZoneFormDialog: React.FC<ZoneFormDialogProps> = ({
               />
             </div>
 
-            {/* Farming type — creatable combobox */}
-            <div>
-              <label htmlFor="zone-farming-type" className="block text-xs font-medium text-gray-600 mb-1.5">
-                Loại nuôi
-                <span className="ml-1.5 text-gray-400 font-normal">(chọn hoặc nhập mới)</span>
-              </label>
-              <CreatableCombobox
-                id="zone-farming-type"
-                value={farmingTypeValue}
-                onChange={(v) => setValue('farming_type', v, { shouldDirty: true })}
-                options={farmingTypes}
-                placeholder="VD: Tôm thẻ chân trắng"
-              />
-            </div>
 
             {/* Status */}
             <div>

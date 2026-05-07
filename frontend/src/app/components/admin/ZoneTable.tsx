@@ -4,26 +4,55 @@
  */
 
 import { useNavigate } from 'react-router';
-import { Pencil, Trash2, Waves, MapPin, Fish, ArrowRight, RefreshCw, AlertCircle } from 'lucide-react';
+import {
+  Pencil,
+  Trash2,
+  Waves,
+  MapPin,
+  Fish,
+  ArrowRight,
+  RefreshCw,
+  AlertCircle,
+} from 'lucide-react';
 import type { Zone } from '../../types/user.types';
 
 const STATUS_CONFIG = {
-  active:      { label: 'Hoạt động',    bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500' },
-  inactive:    { label: 'Ngưng HĐ',     bg: 'bg-gray-100',    text: 'text-gray-600',    dot: 'bg-gray-400'    },
-  maintenance: { label: 'Bảo trì',      bg: 'bg-amber-100',   text: 'text-amber-700',   dot: 'bg-amber-500'   },
+  active: {
+    label: 'Hoạt động',
+    bg: 'bg-emerald-100',
+    text: 'text-emerald-700',
+    dot: 'bg-emerald-500',
+  },
+  inactive: {
+    label: 'Ngưng HĐ',
+    bg: 'bg-gray-100',
+    text: 'text-gray-600',
+    dot: 'bg-gray-400',
+  },
+  maintenance: {
+    label: 'Bảo trì',
+    bg: 'bg-amber-100',
+    text: 'text-amber-700',
+    dot: 'bg-amber-500',
+  },
 };
 
 interface ZoneTableProps {
-  zones:         Zone[];
-  isLoading:     boolean;
-  error:         string | null;
-  onEdit:        (zone: Zone) => void;
-  onDelete:      (zone: Zone) => void;
-  onRetry:       () => void;
+  zones: Zone[];
+  isLoading: boolean;
+  error: string | null;
+  onEdit: (zone: Zone) => void;
+  onDelete: (zone: Zone) => void;
+  onRetry: () => void;
 }
 
 export const ZoneTable: React.FC<ZoneTableProps> = ({
-  zones, isLoading, error, onEdit, onDelete, onRetry,
+  zones,
+  isLoading,
+  error,
+  onEdit,
+  onDelete,
+  onRetry,
 }) => {
   const navigate = useNavigate();
 
@@ -31,7 +60,10 @@ export const ZoneTable: React.FC<ZoneTableProps> = ({
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse">
+          <div
+            key={i}
+            className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse"
+          >
             <div className="h-24 bg-gradient-to-r from-teal-100 to-emerald-100" />
             <div className="p-5 space-y-3">
               <div className="h-4 bg-gray-100 rounded w-3/4" />
@@ -48,7 +80,9 @@ export const ZoneTable: React.FC<ZoneTableProps> = ({
     return (
       <div className="flex flex-col items-center justify-center py-16 bg-white rounded-2xl border border-gray-100">
         <AlertCircle size={32} className="text-red-400 mb-3" />
-        <p className="text-gray-600 text-sm font-medium mb-1">Không thể tải danh sách vùng ao</p>
+        <p className="text-gray-600 text-sm font-medium mb-1">
+          Không thể tải danh sách vùng ao
+        </p>
         <p className="text-gray-400 text-xs mb-4">{error}</p>
         <button
           onClick={onRetry}
@@ -66,7 +100,9 @@ export const ZoneTable: React.FC<ZoneTableProps> = ({
       <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-gray-100">
         <Waves size={36} className="text-gray-200 mb-3" />
         <p className="text-gray-500 text-sm font-medium">Chưa có vùng ao nào</p>
-        <p className="text-gray-400 text-xs mt-1">Nhấn "Thêm Vùng Ao" để bắt đầu</p>
+        <p className="text-gray-400 text-xs mt-1">
+          Nhấn "Thêm Vùng Ao" để bắt đầu
+        </p>
       </div>
     );
   }
@@ -88,16 +124,25 @@ export const ZoneTable: React.FC<ZoneTableProps> = ({
                     <Waves size={20} className="text-white" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-white text-sm font-bold truncate">{zone.name}</p>
+                    <p className="text-white text-sm font-bold truncate">
+                      {zone.name}
+                    </p>
                     {zone.location && (
                       <div className="flex items-center gap-1 mt-0.5">
-                        <MapPin size={10} className="text-emerald-200 shrink-0" />
-                        <p className="text-emerald-200 text-xs truncate">{zone.location}</p>
+                        <MapPin
+                          size={10}
+                          className="text-emerald-200 shrink-0"
+                        />
+                        <p className="text-emerald-200 text-xs truncate">
+                          {zone.location}
+                        </p>
                       </div>
                     )}
                   </div>
                 </div>
-                <span className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.text}`}>
+                <span
+                  className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.text}`}
+                >
                   <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
                   {cfg.label}
                 </span>
@@ -110,10 +155,14 @@ export const ZoneTable: React.FC<ZoneTableProps> = ({
               {zone.farming_type ? (
                 <div className="flex items-center gap-1.5">
                   <Fish size={13} className="text-teal-500 shrink-0" />
-                  <span className="text-sm text-teal-700 font-medium">{zone.farming_type}</span>
+                  <span className="text-sm text-teal-700 font-medium">
+                    {zone.farming_type}
+                  </span>
                 </div>
               ) : (
-                <p className="text-xs text-gray-300 italic">Chưa có loại nuôi</p>
+                <p className="text-xs text-gray-300 italic">
+                  Chưa có loại nuôi
+                </p>
               )}
 
               {/* Created at */}

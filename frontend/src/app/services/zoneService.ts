@@ -1,32 +1,39 @@
-/**
- * zoneService.ts
- * All API calls for Zone management (UC01) — uses the central api client.
- */
+import axios from 'axios';
 
-import { api } from './api';
-import type {
-  Zone,
-  CreateZoneDto,
-  UpdateZoneDto,
-  ApiListResponse,
-  ApiItemResponse,
-} from '../types/user.types';
+const API_URL = 'http://localhost:5000/zones';
 
-export const getZones = (): Promise<Zone[]> =>
-  api.get<ApiListResponse<Zone>>('/admin/zones').then((r) => r.data);
+export const getZones = async () => {
+  const response = await axios.get(API_URL);
+  // Backend trả về { success: true, data: [...] }
+  return response.data.data;
+};
 
-export const getZoneById = (id: string): Promise<Zone> =>
-  api.get<ApiItemResponse<Zone>>(`/admin/zones/${id}`).then((r) => r.data);
+export const createZone = async (data: any) => {
+  const response = await axios.post(API_URL, data);
+  return response.data.data;
+};
 
-export const createZone = (dto: CreateZoneDto): Promise<Zone> =>
-  api.post<ApiItemResponse<Zone>>('/admin/zones', dto).then((r) => r.data);
+export const updateZone = async (id: string, data: any) => {
+  const response = await axios.put(`${API_URL}/${id}`, data);
+  return response.data.data;
+};
 
-export const updateZone = (id: string, dto: UpdateZoneDto): Promise<Zone> =>
-  api.put<ApiItemResponse<Zone>>(`/admin/zones/${id}`, dto).then((r) => r.data);
+export const deleteZone = async (id: string) => {
+  await axios.delete(`${API_URL}/${id}`);
+};
 
-export const deleteZone = (id: string): Promise<void> =>
-  api.delete<{ success: boolean }>(`/admin/zones/${id}`).then(() => undefined);
+export const getZoneById = async (id: string): Promise<Zone> => {
+  try {
+    const response = await axios.get(`${API_URL}/${id}`);
 
-/** Fetches distinct farming types already stored — feeds the creatable combobox */
-export const getFarmingTypes = (): Promise<string[]> =>
-  api.get<ApiListResponse<string>>('/admin/zones/farming-types').then((r) => r.data);
+    // Backend trả về format: { success: true, data: { ...zone } }
+    if (response.data && response.data.success) {
+      return response.data.data;
+    }
+
+    throw new Error('Không thể lấy dữ liệu vùng ao');
+  } catch (error: any) {
+    console.error(`Lỗi khi lấy Zone ID ${id}:`, error);
+    throw error;
+  }
+};
