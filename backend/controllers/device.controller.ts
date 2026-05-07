@@ -23,13 +23,13 @@ export const getDevices = async (req: Request, res: Response) => {
 export const controlDevice = async (req: CustomRequest, res: Response) => {
   try {
     // ID thiết bị lấy từ URL (/api/devices/1/control)
-    const deviceId = req.params.id;
+    const deviceId = req.params.id as string;
 
     // Mức độ (0, 1, 2, 3, 4) lấy từ body gửi lên
     const { level } = req.body;
 
     // Lấy ID user từ req.user (Do Middleware Auth gắn vào)
-    const userId = req.user ? req.user.id : null;
+    const userId = req.user?.id ? String(req.user.id) : undefined;
 
     // Gọi xuống tầng Service
     const result = await deviceService.controlDevice(deviceId, level, userId);
@@ -52,5 +52,107 @@ export const getDeviceLogs = async (req: Request, res: Response) => {
     res.status(200).json(logs);
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Tạo thiết bị mới
+export const createDevice = async (req: Request, res: Response) => {
+  try {
+    const { name, type, feed_key, zone_id, mode, description } = req.body;
+
+    // Kiểm tra dữ liệu bắt buộc
+    if (!name || !type) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu thông tin bắt buộc: name, type",
+      });
+    }
+
+    // Kiểm tra loại thiết bị hợp lệ
+    const validTypes = ["pump", "fan", "light", "servo"];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: `Loại thiết bị không hợp lệ. Phải là: ${validTypes.join(", ")}`,
+      });
+    }
+
+    const device = await deviceService.createDevice({
+      name,
+      type,
+      feed_key: feed_key || undefined,
+      zone_id,
+      mode: mode || "manual",
+      description,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Tạo thiết bị thành công",
+      data: device,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// Cập nhật thiết bị
+export const updateDevice = async (req: Request, res: Response) => {
+  try {
+    const deviceId = req.params.id as string;
+    const { name, type, feed_key, zone_id, mode, description } = req.body;
+
+    // Kiểm tra loại thiết bị nếu được cung cấp
+    if (type) {
+      const validTypes = ["pump", "fan", "light", "servo"];
+      if (!validTypes.includes(type)) {
+        return res.status(400).json({
+          success: false,
+          message: `Loại thiết bị không hợp lệ. Phải là: ${validTypes.join(", ")}`,
+        });
+      }
+    }
+
+    const device = await deviceService.updateDevice(deviceId, {
+      name,
+      type,
+      feed_key,
+      zone_id,
+      mode,
+      description,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Cập nhật thiết bị thành công",
+      data: device,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// Xóa thiết bị
+export const deleteDevice = async (req: Request, res: Response) => {
+  try {
+    const deviceId = req.params.id as string;
+    const result = await deviceService.deleteDevice(deviceId);
+    res.status(200).json({
+      success: true,
+      message: result.message,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// Lấy thiết bị theo ID
+export const getDevice = async (req: Request, res: Response) => {
+  try {
+    const deviceId = req.params.id as string;
+    const device = await deviceService.getDeviceById(deviceId);
+    res.status(200).json(device);
+  } catch (error: any) {
+    res.status(404).json({ success: false, message: error.message });
   }
 };

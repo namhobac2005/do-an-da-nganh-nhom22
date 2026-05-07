@@ -211,3 +211,131 @@ export const cancelDeviceSchedule = async (
     return { success: false, error: error.message || "Lỗi kết nối server" };
   }
 };
+
+// ===== DEVICE MANAGEMENT CRUD FUNCTIONS =====
+
+export interface Device {
+  id: string;
+  name: string;
+  type: "pump" | "fan" | "light" | "servo";
+  feed_key: string;
+  zone_id?: string;
+  status: string;
+  mode: "auto" | "manual";
+  description?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreateDeviceDto {
+  name: string;
+  type: "pump" | "fan" | "light" | "servo";
+  feed_key: string;
+  zone_id?: string;
+  mode?: "auto" | "manual";
+  description?: string;
+}
+
+export interface UpdateDeviceDto {
+  name?: string;
+  type?: "pump" | "fan" | "light" | "servo";
+  feed_key?: string;
+  zone_id?: string;
+  mode?: "auto" | "manual";
+  description?: string;
+}
+
+/**
+ * Tạo thiết bị mới
+ */
+export const createDevice = async (
+  deviceData: CreateDeviceDto,
+): Promise<{ success: boolean; data?: Device; error?: string }> => {
+  try {
+    const response = await fetch(`${API_URL}/devices`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(deviceData),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.message || "Tạo thiết bị thất bại");
+    }
+
+    return { success: true, data: result.data };
+  } catch (error: any) {
+    console.error("[FE] Lỗi tạo thiết bị:", error);
+    return { success: false, error: error.message || "Lỗi kết nối server" };
+  }
+};
+
+/**
+ * Cập nhật thiết bị
+ */
+export const updateDevice = async (
+  deviceId: string,
+  deviceData: UpdateDeviceDto,
+): Promise<{ success: boolean; data?: Device; error?: string }> => {
+  try {
+    const response = await fetch(`${API_URL}/devices/${deviceId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(deviceData),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.message || "Cập nhật thiết bị thất bại");
+    }
+
+    return { success: true, data: result.data };
+  } catch (error: any) {
+    console.error("[FE] Lỗi cập nhật thiết bị:", error);
+    return { success: false, error: error.message || "Lỗi kết nối server" };
+  }
+};
+
+/**
+ * Xóa thiết bị
+ */
+export const deleteDevice = async (
+  deviceId: string,
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const response = await fetch(`${API_URL}/devices/${deviceId}`, {
+      method: "DELETE",
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.message || "Xóa thiết bị thất bại");
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("[FE] Lỗi xóa thiết bị:", error);
+    return { success: false, error: error.message || "Lỗi kết nối server" };
+  }
+};
+
+/**
+ * Lấy chi tiết thiết bị
+ */
+export const getDevice = async (deviceId: string): Promise<Device | null> => {
+  try {
+    const response = await fetch(`${API_URL}/devices/${deviceId}`);
+    if (!response.ok) throw new Error("Không lấy được chi tiết thiết bị");
+    return await response.json();
+  } catch (error) {
+    console.error("[FE] Lỗi lấy chi tiết thiết bị:", error);
+    return null;
+  }
+};

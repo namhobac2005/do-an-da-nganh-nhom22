@@ -1,15 +1,14 @@
-import { createClient } from "@supabase/supabase-js";
-import axios from "axios"; // Nhớ chạy: npm install axios @supabase/supabase-js
-
-// Khởi tạo Supabase client (Ép kiểu string để TS không báo lỗi thiếu biến môi trường)
-const supabaseUrl = process.env.SUPABASE_URL as string;
-const supabaseKey = process.env.SUPABASE_KEY as string;
-const supabase = createClient(supabaseUrl, supabaseKey);
+import axios from "axios";
+import { supabaseAdmin as supabase } from "../lib/supabase.client.ts"; // Nhớ chạy: npm install axios @supabase/supabase-js
 
 // Cấu hình Adafruit IO
 const AIO_USERNAME = process.env.AIO_USERNAME;
 const AIO_KEY = process.env.AIO_KEY;
 const AIO_BASE_URL = `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds`;
+
+const aioHeaders = () => ({
+  headers: { "X-AIO-Key": AIO_KEY, "Content-Type": "application/json" },
+});
 
 /**
  * Lấy danh sách thiết bị từ bảng actuators
@@ -141,4 +140,186 @@ export const getDeviceLogs = async (
     console.error("[Backend] Error in getDeviceLogs:", error);
     throw new Error(error.message);
   }
+};
+
+/**
+ * Tạo thiết bị mới
+ */
+export const createDevice = async (deviceData: {
+  name: string;
+  type: "pump" | "fan" | "light" | "servo";
+  feed_key?: string | undefined;
+  zone_id?: string;
+  mode?: "auto" | "manual";
+  description?: string;
+}) => {
+  // If feed_key not provided, auto-generate a unique feed key based on name
+  let feedKey = (deviceData.feed_key || "").trim();
+  const slugify = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 48);
+
+  if (!feedKey) {
+    const base = slugify(deviceData.name || "device");
+    let candidate = base || "device";
+    let attempts = 0;
+    while (attempts < 10) {
+      const suffix =
+        attempts === 0 ? "" : `_${Math.random().toString(36).slice(2, 5)}`;
+      candidate = `${base}${suffix}`.slice(0, 64);
+      const { data: existing } = await supabase
+        .from("actuators")
+        .select("id")
+        .eq("feed_key", candidate)
+        .limit(1);
+      if (!existing || (Array.isArray(existing) && existing.length === 0)) {
+        feedKey = candidate;
+        break;
+      }
+      attempts += 1;
+    }
+    if (!feedKey) {
+      // fallback to random key
+      feedKey = `feed_${Math.random().toString(36).slice(2, 9)}`;
+    }
+  }
+
+  // Attempt to create feed on Adafruit IO (best-effort).
+  if (AIO_USERNAME && AIO_KEY) {
+    try {
+      // Adafruit IO: POST /api/v2/{username}/feeds
+      // Body: provide a name and key; if key exists, API may return 409 — treat as OK
+      await axios.post(
+        `${AIO_BASE_URL}`,
+        { name: deviceData.name || feedKey, key: feedKey },
+        aioHeaders(),
+      );
+    } catch (err: any) {
+      // If feed already exists, ignore; else log and continue — user can retry manually
+      const status = err?.response?.status;
+      if (status && status >= 400 && status < 500 && status !== 409) {
+        console.warn(
+          "[Backend] Adafruit IO feed create returned client error:",
+          status,
+          err?.response?.data,
+        );
+      } else if (status === 409) {
+        // feed exists — fine
+      } else {
+        console.warn(
+          "[Backend] Could not create feed on Adafruit IO:",
+          err?.message ?? err,
+        );
+      }
+    }
+  } else {
+    console.warn(
+      "[Backend] AIO_USERNAME or AIO_KEY not configured — skipping feed creation",
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("actuators")
+    .insert([
+      Object.assign(
+        {
+          name: deviceData.name,
+          type: deviceData.type,
+          feed_key: feedKey,
+          zone_id: deviceData.zone_id || null,
+          mode: deviceData.mode || "manual",
+          status: "OFF",
+        },
+        // only attach description if explicitly provided to avoid schema cache issues
+        deviceData.description !== undefined
+          ? { description: deviceData.description }
+          : {},
+      ),
+    ])
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data;
+};
+
+/**
+ * Cập nhật thiết bị
+ */
+export const updateDevice = async (
+  deviceId: string,
+  deviceData: {
+    name?: string;
+    type?: "pump" | "fan" | "light" | "servo";
+    feed_key?: string;
+    zone_id?: string;
+    mode?: "auto" | "manual";
+    description?: string;
+  },
+) => {
+  const { data, error } = await supabase
+    .from("actuators")
+    .update(deviceData)
+    .eq("id", deviceId)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data;
+};
+
+/**
+ * Xóa thiết bị
+ */
+export const deleteDevice = async (deviceId: string) => {
+  // Fetch device to get feed_key
+  const { data: device, error: fetchErr } = await supabase
+    .from("actuators")
+    .select("feed_key")
+    .eq("id", deviceId)
+    .single();
+
+  if (fetchErr) throw new Error(fetchErr.message);
+
+  const feedKey = device?.feed_key;
+  if (feedKey && AIO_USERNAME && AIO_KEY) {
+    try {
+      await axios.delete(`${AIO_BASE_URL}/${feedKey}`, aioHeaders());
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 404) {
+        // feed not found on Adafruit — ignore
+      } else {
+        console.warn(
+          "[Backend] Could not delete feed on Adafruit IO:",
+          err?.message ?? err,
+        );
+      }
+    }
+  }
+
+  const { error } = await supabase
+    .from("actuators")
+    .delete()
+    .eq("id", deviceId);
+
+  if (error) throw new Error(error.message);
+  return { success: true, message: "Đã xóa thiết bị thành công" };
+};
+
+/**
+ * Lấy thiết bị theo ID
+ */
+export const getDeviceById = async (deviceId: string) => {
+  const { data, error } = await supabase
+    .from("actuators")
+    .select("*")
+    .eq("id", deviceId)
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data;
 };
