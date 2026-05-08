@@ -4,10 +4,10 @@
  * Features:
  *  - React-Hook-Form validation with error messages
  *  - Select dropdown for device type (pump, fan, light, servo)
- *  - Support for zones
+ *  - Dynamic pond selection based on zone
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X, Loader2 } from "lucide-react";
@@ -17,6 +17,7 @@ import type {
   UpdateDeviceDto,
 } from "../../services/deviceService";
 import type { Zone } from "../../types/user.types";
+import * as sensorService from "../../services/sensorService";
 
 // ===== TYPES =====
 
@@ -25,9 +26,15 @@ type FormValues = {
   type: "pump" | "fan" | "light" | "servo";
   feed_key: string;
   zone_id: string;
+  pond_id: string;
   mode: "auto" | "manual";
   description: string;
 };
+
+interface Pond {
+  id: string;
+  name: string;
+}
 
 interface DeviceFormDialogProps {
   open: boolean;
@@ -61,6 +68,9 @@ export const DeviceFormDialog: React.FC<DeviceFormDialogProps> = ({
   zones,
 }) => {
   const isEdit = !!editDevice;
+  const [selectedZone, setSelectedZone] = useState<string>("");
+  const [ponds, setPonds] = useState<Pond[]>([]);
+  const [isLoadingPonds, setIsLoadingPonds] = useState(false);
 
   const {
     register,
@@ -74,10 +84,37 @@ export const DeviceFormDialog: React.FC<DeviceFormDialogProps> = ({
       type: "pump",
       feed_key: "",
       zone_id: "",
+      pond_id: "",
       mode: "manual",
       description: "",
     },
   });
+
+  // Watch zone_id to load ponds
+  const watchedZoneId = watch("zone_id");
+
+  // Fetch ponds when zone changes
+  useEffect(() => {
+    const fetchPonds = async () => {
+      if (!watchedZoneId) {
+        setPonds([]);
+        return;
+      }
+
+      setIsLoadingPonds(true);
+      try {
+        const pondData = await sensorService.getPondsByZone(watchedZoneId);
+        setPonds(pondData);
+      } catch (err) {
+        console.error("Failed to fetch ponds:", err);
+        setPonds([]);
+      } finally {
+        setIsLoadingPonds(false);
+      }
+    };
+
+    fetchPonds();
+  }, [watchedZoneId]);
 
   // Reset form when dialog opens/closes or editDevice changes
   useEffect(() => {
@@ -86,6 +123,7 @@ export const DeviceFormDialog: React.FC<DeviceFormDialogProps> = ({
       type: (editDevice?.type as any) ?? "pump",
       feed_key: editDevice?.feed_key ?? "",
       zone_id: editDevice?.zone_id ?? "",
+      pond_id: editDevice?.pond_id ?? "",
       mode: (editDevice?.mode as any) ?? "manual",
       description: editDevice?.description ?? "",
     });
@@ -96,7 +134,7 @@ export const DeviceFormDialog: React.FC<DeviceFormDialogProps> = ({
       name: values.name.trim(),
       type: values.type,
       feed_key: values.feed_key.trim(),
-      zone_id: values.zone_id || undefined,
+      pond_id: values.pond_id || undefined,
       mode: values.mode,
       description: values.description.trim() || undefined,
     };
@@ -239,20 +277,73 @@ export const DeviceFormDialog: React.FC<DeviceFormDialogProps> = ({
                 htmlFor="device-zone"
                 className="block text-xs font-medium text-gray-600 mb-1.5"
               >
-                Vùng ao
+                Khu vực <span className="text-red-500">*</span>
               </label>
               <select
                 id="device-zone"
-                {...register("zone_id")}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all bg-white"
+                {...register("zone_id", {
+                  required: "Vui lòng chọn khu vực",
+                })}
+                className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 outline-none focus:ring-2 transition-all ${
+                  errors.zone_id
+                    ? "border-red-400 focus:border-red-400 focus:ring-red-100"
+                    : "border-gray-200 focus:border-emerald-400 focus:ring-emerald-100"
+                } bg-white`}
               >
-                <option value="">-- Không chọn --</option>
+                <option value="">-- Chọn khu vực --</option>
                 {zones.map((z) => (
                   <option key={z.id} value={z.id}>
                     {z.name}
                   </option>
                 ))}
               </select>
+              {errors.zone_id && (
+                <p className="text-red-500 text-xs mt-1">
+                  {errors.zone_id.message}
+                </p>
+              )}
+            </div>
+
+            {/* Pond */}
+            <div>
+              <label
+                htmlFor="device-pond"
+                className="block text-xs font-medium text-gray-600 mb-1.5"
+              >
+                Ao nuôi{" "}
+                {watchedZoneId && <span className="text-red-500">*</span>}
+              </label>
+              <select
+                id="device-pond"
+                disabled={!watchedZoneId || isLoadingPonds}
+                {...register("pond_id", {
+                  required: watchedZoneId ? "Vui lòng chọn ao nuôi" : false,
+                })}
+                className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 outline-none focus:ring-2 transition-all ${
+                  errors.pond_id
+                    ? "border-red-400 focus:border-red-400 focus:ring-red-100"
+                    : "border-gray-200 focus:border-emerald-400 focus:ring-emerald-100"
+                } ${!watchedZoneId || isLoadingPonds ? "bg-gray-50" : "bg-white"}`}
+              >
+                <option value="">
+                  {!watchedZoneId
+                    ? "-- Chọn khu vực trước --"
+                    : isLoadingPonds
+                      ? "-- Đang tải --"
+                      : "-- Chọn ao nuôi --"}
+                </option>
+                {!isLoadingPonds &&
+                  ponds.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+              </select>
+              {errors.pond_id && (
+                <p className="text-red-500 text-xs mt-1">
+                  {errors.pond_id.message}
+                </p>
+              )}
             </div>
 
             {/* Mode */}

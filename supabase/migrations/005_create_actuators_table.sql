@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS public.actuators (
   name         TEXT NOT NULL,
   type         TEXT NOT NULL CHECK (type IN ('pump', 'fan', 'light', 'servo')),
   feed_key     TEXT NOT NULL UNIQUE,
-  zone_id      UUID REFERENCES public.zones(id) ON DELETE SET NULL,
+  pond_id      UUID REFERENCES public.ponds(id) ON DELETE SET NULL,
   status       TEXT NOT NULL DEFAULT 'OFF' CHECK (status IN ('OFF', 'ON', '0', '1', '2', '3', '4')),
   mode         TEXT NOT NULL DEFAULT 'manual' CHECK (mode IN ('auto', 'manual')),
   description  TEXT,
@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS public.actuators (
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Create index for zone_id for faster queries
-CREATE INDEX IF NOT EXISTS idx_actuators_zone_id ON public.actuators(zone_id);
+-- Create index for pond_id for faster queries
+CREATE INDEX IF NOT EXISTS idx_actuators_pond_id ON public.actuators(pond_id);
 
 -- Create index for feed_key for uniqueness and faster lookup
 CREATE INDEX IF NOT EXISTS idx_actuators_feed_key ON public.actuators(feed_key);
@@ -69,14 +69,3 @@ CREATE POLICY "actuators_read_authenticated"
 CREATE POLICY "actuator_logs_read_authenticated"
   ON public.actuator_logs FOR SELECT
   TO authenticated USING (true);
-
--- ============================================================
--- Seed some sample actuators
--- ============================================================
-
-INSERT INTO public.actuators (name, type, feed_key, zone_id, status, mode, description) VALUES
-  ('Máy Bơm 1', 'pump', 'pump_1', '00000000-0000-0000-0000-000000000001', 'OFF', 'manual', 'Máy bơm nước chính Khu A'),
-  ('Quạt Sục Khí 1', 'fan', 'fan_1', '00000000-0000-0000-0000-000000000001', 'OFF', 'manual', 'Quạt sục khí Khu A'),
-  ('Đèn LED 1', 'light', 'light_1', '00000000-0000-0000-0000-000000000002', 'OFF', 'manual', 'Đèn LED Khu B - 4 mức'),
-  ('Servo Van 1', 'servo', 'servo_1', '00000000-0000-0000-0000-000000000002', 'OFF', 'manual', 'Van điều chỉnh Khu B')
-ON CONFLICT (feed_key) DO NOTHING;

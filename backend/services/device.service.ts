@@ -5,6 +5,7 @@ import { supabaseAdmin as supabase } from "../lib/supabase.client.ts"; // Nhớ 
 const AIO_USERNAME = process.env.AIO_USERNAME;
 const AIO_KEY = process.env.AIO_KEY;
 const AIO_BASE_URL = `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds`;
+let aioFeedCreationDisabled = false;
 
 const aioHeaders = () => ({
   headers: { "X-AIO-Key": AIO_KEY, "Content-Type": "application/json" },
@@ -149,7 +150,7 @@ export const createDevice = async (deviceData: {
   name: string;
   type: "pump" | "fan" | "light" | "servo";
   feed_key?: string | undefined;
-  zone_id?: string;
+  pond_id?: string;
   mode?: "auto" | "manual";
   description?: string;
 }) => {
@@ -188,7 +189,7 @@ export const createDevice = async (deviceData: {
   }
 
   // Attempt to create feed on Adafruit IO (best-effort).
-  if (AIO_USERNAME && AIO_KEY) {
+  if (AIO_USERNAME && AIO_KEY && !aioFeedCreationDisabled) {
     try {
       // Adafruit IO: POST /api/v2/{username}/feeds
       // Body: provide a name and key; if key exists, API may return 409 — treat as OK
@@ -198,20 +199,26 @@ export const createDevice = async (deviceData: {
         aioHeaders(),
       );
     } catch (err: any) {
-      // If feed already exists, ignore; else log and continue — user can retry manually
       const status = err?.response?.status;
-      if (status && status >= 400 && status < 500 && status !== 409) {
-        console.warn(
-          "[Backend] Adafruit IO feed create returned client error:",
-          status,
-          err?.response?.data,
-        );
-      } else if (status === 409) {
+      const responseData = err?.response?.data;
+      const responseMessage =
+        responseData?.error?.[0] || responseData?.message || err?.message || "";
+      const isFeedLimitReached =
+        status === 400 &&
+        typeof responseMessage === "string" &&
+        responseMessage.toLowerCase().includes("feed limit reached");
+
+      if (status === 409) {
         // feed exists — fine
+      } else if (isFeedLimitReached) {
+        aioFeedCreationDisabled = true;
+        console.warn(
+          "[Backend] Adafruit IO feed limit reached; skipping remote feed creation for the rest of this process.",
+        );
       } else {
         console.warn(
           "[Backend] Could not create feed on Adafruit IO:",
-          err?.message ?? err,
+          status ?? err?.message ?? err,
         );
       }
     }
@@ -229,7 +236,7 @@ export const createDevice = async (deviceData: {
           name: deviceData.name,
           type: deviceData.type,
           feed_key: feedKey,
-          zone_id: deviceData.zone_id || null,
+          pond_id: deviceData.pond_id || null,
           mode: deviceData.mode || "manual",
           status: "OFF",
         },
@@ -255,7 +262,7 @@ export const updateDevice = async (
     name?: string;
     type?: "pump" | "fan" | "light" | "servo";
     feed_key?: string;
-    zone_id?: string;
+    pond_id?: string;
     mode?: "auto" | "manual";
     description?: string;
   },
@@ -316,10 +323,15 @@ export const deleteDevice = async (deviceId: string) => {
 export const getDeviceById = async (deviceId: string) => {
   const { data, error } = await supabase
     .from("actuators")
-    .select("*")
+    .select("*, ponds(zone_id)")
     .eq("id", deviceId)
     .single();
 
   if (error) throw new Error(error.message);
-  return data;
+
+  // Flatten zone_id from joined ponds table for easier access
+  return {
+    ...data,
+    zone_id: data?.ponds?.zone_id || null,
+  };
 };
