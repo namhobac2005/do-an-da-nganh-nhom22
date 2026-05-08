@@ -5,6 +5,7 @@
  */
 
 import { NavLink, useLocation } from "react-router";
+import { useState } from "react";
 import {
   LayoutDashboard,
   Waves,
@@ -20,18 +21,16 @@ import {
   Settings,
   Zap,
   Activity,
-  FileText,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
-// ===== MENU STRUCTURE =====
-
 interface NavItem {
-  path: string;
+  path?: string;
   label: string;
   icon: React.ReactNode;
   adminOnly?: boolean;
   badge?: number;
+  children?: NavItem[];
 }
 
 interface NavGroup {
@@ -53,24 +52,67 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: "QUẢN TRỊ HỆ THỐNG",
     items: [
-      { path: '/admin/zones', label: 'Vùng Ao (Zone)', icon: <Waves size={18} />, adminOnly: true },
-      { path: '/admin/devices', label: 'Thiết Bị', icon: <Cpu size={18} />, adminOnly: true },
-      { path: '/admin/users', label: 'Tài Khoản', icon: <Users size={18} />, adminOnly: true },
-      { path: '/admin/alerts', label: 'Cảnh Báo & Ngưỡng', icon: <BellRing size={18} />, adminOnly: true },
-      { path: '/admin/logs', label: 'Nhật Ký Hành Động', icon: <Activity size={18} />, adminOnly: true },
+      {
+        path: "/admin/zones",
+        label: "Vùng Ao (Zone)",
+        icon: <Waves size={18} />,
+        adminOnly: true,
+      },
+      {
+        label: "Thiết Bị",
+        icon: <Cpu size={18} />,
+        adminOnly: true,
+        children: [
+          {
+            path: "/admin/devices",
+            label: "Quản lý thiết bị",
+            icon: <Activity size={16} />,
+          },
+          {
+            path: "/control",
+            label: "Điều khiển thiết bị",
+            icon: <Zap size={16} />,
+          },
+        ],
+      },
+      {
+        path: "/admin/users",
+        label: "Tài Khoản",
+        icon: <Users size={18} />,
+        adminOnly: true,
+      },
+      {
+        path: "/admin/alerts",
+        label: "Cảnh Báo & Ngưỡng",
+        icon: <BellRing size={18} />,
+        adminOnly: true,
+      },
+      {
+        path: "/admin/logs",
+        label: "Nhật Ký Hành Động",
+        icon: <Activity size={18} />,
+        adminOnly: true,
+      },
     ],
   },
   {
     title: "GIÁM SÁT & VẬN HÀNH",
     items: [
-      { path: "/monitoring", label: "Giám Sát Real-time", icon: <Gauge size={18} /> },
-      { path: "/control", label: "Điều Khiển Thiết Bị", icon: <Zap size={18} /> },
+      {
+        path: "/monitoring",
+        label: "Giám Sát Real-time",
+        icon: <Gauge size={18} />,
+      },
     ],
   },
   {
     title: "BÁO CÁO",
     items: [
-      { path: "/reports", label: "Báo Cáo & Thống Kê", icon: <BarChart3 size={18} /> },
+      {
+        path: "/reports",
+        label: "Báo Cáo & Thống Kê",
+        icon: <BarChart3 size={18} />,
+      },
     ],
   },
   {
@@ -87,6 +129,10 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const { user, logout, hasRole } = useAuth();
   const location = useLocation();
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+
+  const toggleGroup = (label: string) =>
+    setOpenGroups((s) => ({ ...s, [label]: !s[label] }));
 
   const isActive = (path: string) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
@@ -155,58 +201,121 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                   {group.title}
                 </p>
                 <ul className="space-y-1">
-                  {visibleItems.map((item) => (
-                    <li key={item.path}>
-                      <NavLink
-                        to={item.path}
-                        onClick={onClose}
-                        className={`
-                          flex items-center gap-3 px-3 py-2.5 rounded-lg
-                          transition-all duration-150 group relative
-                          ${isActive(item.path)
-                            ? "bg-emerald-500 text-white shadow-lg shadow-emerald-900/30"
-                            : "text-white/70 hover:bg-white/10 hover:text-white"
-                          }
-                        `}
-                      >
-                        <span
-                          className={
-                            isActive(item.path)
-                              ? "text-white"
-                              : "text-white/60 group-hover:text-white"
-                          }
-                        >
-                          {item.icon}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: "13.5px",
-                            fontWeight: isActive(item.path) ? 600 : 400,
-                          }}
-                        >
-                          {item.label}
-                        </span>
-
-                        {/* Badge cảnh báo */}
-                        {item.badge && item.badge > 0 && (
-                          <span
-                            className="ml-auto bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center"
-                            style={{ fontSize: "11px", fontWeight: 700 }}
+                  {visibleItems.map((item) => {
+                    // If item has children render collapsible group
+                    if (item.children && item.children.length > 0) {
+                      const open = !!openGroups[item.label];
+                      return (
+                        <li key={item.label}>
+                          <button
+                            onClick={() => toggleGroup(item.label)}
+                            className={`
+                              w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
+                              transition-all duration-150 text-white/70 hover:bg-white/10 hover:text-white
+                            `}
                           >
-                            {item.badge}
-                          </span>
-                        )}
+                            <span className="text-white/60">{item.icon}</span>
+                            <span
+                              style={{ fontSize: "13.5px", fontWeight: 500 }}
+                            >
+                              {item.label}
+                            </span>
+                            <ChevronRight
+                              size={14}
+                              className={`ml-auto transition-transform ${open ? "rotate-90" : "rotate-0"}`}
+                            />
+                          </button>
 
-                        {/* Active indicator */}
-                        {isActive(item.path) && (
-                          <ChevronRight
-                            size={14}
-                            className="ml-auto opacity-70"
-                          />
-                        )}
-                      </NavLink>
-                    </li>
-                  ))}
+                          {open && (
+                            <ul className="mt-1 ml-4 space-y-1">
+                              {item.children.map((c) => (
+                                <li key={c.path ?? c.label}>
+                                  <NavLink
+                                    to={c.path!}
+                                    onClick={onClose}
+                                    className={`
+                                      flex items-center gap-2 px-3 py-2 rounded-lg w-full text-left
+                                      transition-all duration-150 group relative text-white/70 hover:bg-white/10 hover:text-white
+                                      ${isActive(c.path ?? "") ? "bg-emerald-500 text-white" : ""}
+                                    `}
+                                  >
+                                    <span className="text-white/60">
+                                      {c.icon}
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontSize: "13px",
+                                        fontWeight: isActive(c.path ?? "")
+                                          ? 600
+                                          : 400,
+                                      }}
+                                    >
+                                      {c.label}
+                                    </span>
+                                  </NavLink>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </li>
+                      );
+                    }
+
+                    // Regular item
+                    return (
+                      <li key={item.path}>
+                        <NavLink
+                          to={item.path!}
+                          onClick={onClose}
+                          className={`
+                            flex items-center gap-3 px-3 py-2.5 rounded-lg
+                            transition-all duration-150 group relative
+                            ${
+                              isActive(item.path!)
+                                ? "bg-emerald-500 text-white shadow-lg shadow-emerald-900/30"
+                                : "text-white/70 hover:bg-white/10 hover:text-white"
+                            }
+                          `}
+                        >
+                          <span
+                            className={
+                              isActive(item.path!)
+                                ? "text-white"
+                                : "text-white/60 group-hover:text-white"
+                            }
+                          >
+                            {item.icon}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: "13.5px",
+                              fontWeight: isActive(item.path!) ? 600 : 400,
+                            }}
+                          >
+                            {item.label}
+                          </span>
+
+                          {/* Badge cảnh báo */}
+                          {item.badge && item.badge > 0 && (
+                            <span
+                              className="ml-auto bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center"
+                              style={{ fontSize: "11px", fontWeight: 700 }}
+                            >
+                              {item.badge}
+                            </span>
+                          )}
+
+                          {/* Active indicator */}
+                          {isActive(item.path!) && (
+                            <ChevronRight
+                              size={14}
+                              className="ml-auto opacity-70"
+                            />
+                          )}
+                        </NavLink>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             );

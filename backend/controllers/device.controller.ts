@@ -58,7 +58,7 @@ export const getDeviceLogs = async (req: Request, res: Response) => {
 // Tạo thiết bị mới
 export const createDevice = async (req: Request, res: Response) => {
   try {
-    const { name, type, feed_key, zone_id, mode, description } = req.body;
+    const { name, type, feed_key, pond_id, mode, description } = req.body;
 
     // Kiểm tra dữ liệu bắt buộc
     if (!name || !type) {
@@ -81,7 +81,7 @@ export const createDevice = async (req: Request, res: Response) => {
       name,
       type,
       feed_key: feed_key || undefined,
-      zone_id,
+      pond_id,
       mode: mode || "manual",
       description,
     });
@@ -100,7 +100,7 @@ export const createDevice = async (req: Request, res: Response) => {
 export const updateDevice = async (req: Request, res: Response) => {
   try {
     const deviceId = req.params.id as string;
-    const { name, type, feed_key, zone_id, mode, description } = req.body;
+    const { name, type, feed_key, pond_id, mode, description } = req.body;
 
     // Kiểm tra loại thiết bị nếu được cung cấp
     if (type) {
@@ -117,7 +117,7 @@ export const updateDevice = async (req: Request, res: Response) => {
       name,
       type,
       feed_key,
-      zone_id,
+      pond_id,
       mode,
       description,
     });

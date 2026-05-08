@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
+import { useSearchParams } from "react-router";
 import {
   Droplets,
   Wind,
@@ -31,7 +32,7 @@ import {
   type DeviceSchedule,
   type SendCommandResult,
 } from "../../services/deviceService";
-import { getZones } from "../../services/zoneService";
+import * as sensorService from "../../services/sensorService";
 
 // ===== CONSTANTS & CONFIG =====
 
@@ -219,6 +220,7 @@ export interface Device {
   mode: DeviceMode;
   lastUpdated: string;
   zone_id?: string | null;
+  pond_id?: string | null;
 }
 
 // ===== CONFIRM DIALOG COMPONENT =====
@@ -601,6 +603,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
 // ===== MAIN DIEUKHIEN PAGE =====
 
 export const DieuKhien: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [devices, setDevices] = useState<Device[]>([]);
   const [filterType, setFilterType] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -622,6 +625,10 @@ export const DieuKhien: React.FC = () => {
   const [loadingDeviceId, setLoadingDeviceId] = useState<string | null>(null);
   const [schedules, setSchedules] = useState<DeviceSchedule[]>([]);
   const [zones, setZones] = useState<{ id: string; name: string }[]>([]);
+  const [ponds, setPonds] = useState<{ id: string; name: string }[]>([]);
+  const [selectedZoneId, setSelectedZoneId] = useState<string>("");
+  const [selectedPondId, setSelectedPondId] = useState<string>("");
+  const [loadingPonds, setLoadingPonds] = useState(false);
   const [selectedZoneIds, setSelectedZoneIds] = useState<string[]>([]);
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
@@ -675,7 +682,7 @@ export const DieuKhien: React.FC = () => {
   useEffect(() => {
     const fetchZones = async () => {
       try {
-        const zs = await getZones();
+        const zs = await sensorService.getZones();
         setZones(zs || []);
       } catch (e) {
         console.error("Không lấy được danh sách ao/zones:", e);
@@ -683,6 +690,47 @@ export const DieuKhien: React.FC = () => {
     };
     fetchZones();
   }, []);
+
+  useEffect(() => {
+    const zoneId = searchParams.get("zoneId") ?? "";
+    const pondId = searchParams.get("pondId") ?? "";
+    setSelectedZoneId(zoneId);
+    setSelectedPondId(pondId);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedZoneId) {
+      setPonds([]);
+      setSelectedPondId("");
+      return;
+    }
+
+    const fetchPonds = async () => {
+      setLoadingPonds(true);
+      const data = await sensorService.getPondsByZone(selectedZoneId);
+      setPonds(data);
+      setLoadingPonds(false);
+    };
+
+    fetchPonds();
+  }, [selectedZoneId]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    if (selectedZoneId) {
+      params.set("zoneId", selectedZoneId);
+    } else {
+      params.delete("zoneId");
+    }
+
+    if (selectedPondId) {
+      params.set("pondId", selectedPondId);
+    } else {
+      params.delete("pondId");
+    }
+
+    setSearchParams(params);
+  }, [selectedZoneId, selectedPondId, setSearchParams]);
 
   useEffect(() => {
     const fetchSchedules = async () => {
@@ -697,6 +745,7 @@ export const DieuKhien: React.FC = () => {
 
   const filteredDevices = devices.filter((device) => {
     if (!ALLOWED_DEVICE_TYPES.includes(device.type)) return false;
+    if (selectedPondId && device.pond_id !== selectedPondId) return false;
     if (filterType !== "all" && device.type !== filterType) return false;
     if (searchQuery) {
       return device.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -1084,6 +1133,38 @@ export const DieuKhien: React.FC = () => {
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex flex-wrap gap-3 items-center">
         <Filter size={16} className="text-gray-400" />
+        <select
+          value={selectedZoneId}
+          onChange={(e) => {
+            setSelectedZoneId(e.target.value);
+            setSelectedPondId("");
+          }}
+          className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-emerald-400"
+          style={{ fontSize: "13px" }}
+        >
+          <option value="">Tất cả vùng</option>
+          {zones.map((zone) => (
+            <option key={zone.id} value={zone.id}>
+              {zone.name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={selectedPondId}
+          onChange={(e) => setSelectedPondId(e.target.value)}
+          disabled={!selectedZoneId || loadingPonds}
+          className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-emerald-400 disabled:opacity-60"
+          style={{ fontSize: "13px" }}
+        >
+          <option value="">Tất cả ao</option>
+          {ponds.map((pond) => (
+            <option key={pond.id} value={pond.id}>
+              {pond.name}
+            </option>
+          ))}
+        </select>
+
         <input
           type="text"
           placeholder="Tìm thiết bị..."

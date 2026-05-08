@@ -66,7 +66,7 @@ export const getAllDevices = async () => {
         mode: dbDev.mode ? dbDev.mode.toLowerCase() : "manual",
         lastUpdated: dbDev.updated_at || new Date().toISOString(),
         // Nếu DB có liên kết zone/ao, giữ nguyên trường để frontend có thể lọc theo ao
-        zone_id: dbDev.zone_id || null,
+        pond_id: dbDev.pond_id || null,
       };
     });
   } catch (error) {
@@ -219,7 +219,7 @@ export interface Device {
   name: string;
   type: "pump" | "fan" | "light" | "servo";
   feed_key: string;
-  zone_id?: string;
+  pond_id?: string;
   status: string;
   mode: "auto" | "manual";
   description?: string;
@@ -231,7 +231,7 @@ export interface CreateDeviceDto {
   name: string;
   type: "pump" | "fan" | "light" | "servo";
   feed_key: string;
-  zone_id?: string;
+  pond_id?: string;
   mode?: "auto" | "manual";
   description?: string;
 }
@@ -240,7 +240,7 @@ export interface UpdateDeviceDto {
   name?: string;
   type?: "pump" | "fan" | "light" | "servo";
   feed_key?: string;
-  zone_id?: string;
+  pond_id?: string;
   mode?: "auto" | "manual";
   description?: string;
 }

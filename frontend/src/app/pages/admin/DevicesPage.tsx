@@ -6,11 +6,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Search, RefreshCw, Zap } from "lucide-react";
+import { useSearchParams } from "react-router";
 
 import { DeviceTable } from "../../components/admin/DeviceTable";
 import { DeviceFormDialog } from "../../components/admin/DeviceFormDialog";
 import * as deviceService from "../../services/deviceService";
 import * as zoneService from "../../services/zoneService";
+import * as sensorService from "../../services/sensorService";
 import type {
   Device,
   CreateDeviceDto,
@@ -19,8 +21,18 @@ import type {
 import type { Zone } from "../../types/user.types";
 
 export const DevicesPage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [devices, setDevices] = useState<Device[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
+  const [filterZones, setFilterZones] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [filterPonds, setFilterPonds] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [selectedZoneId, setSelectedZoneId] = useState<string>("");
+  const [selectedPondId, setSelectedPondId] = useState<string>("");
+  const [loadingPonds, setLoadingPonds] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -42,7 +54,7 @@ export const DevicesPage: React.FC = () => {
         name: dev.name,
         type: dev.type as any,
         feed_key: dev.feed_key,
-        zone_id: dev.zone_id,
+        pond_id: dev.pond_id,
         status: dev.status || "OFF",
         mode: dev.mode || "manual",
         description: dev.description,
@@ -62,13 +74,66 @@ export const DevicesPage: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    const zoneId = searchParams.get("zoneId") ?? "";
+    const pondId = searchParams.get("pondId") ?? "";
+    setSelectedZoneId(zoneId);
+    setSelectedPondId(pondId);
+  }, []);
+
+  useEffect(() => {
+    const fetchFilterZones = async () => {
+      const data = await sensorService.getZones();
+      setFilterZones(data);
+    };
+    fetchFilterZones();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedZoneId) {
+      setFilterPonds([]);
+      setSelectedPondId("");
+      return;
+    }
+
+    const fetchFilterPonds = async () => {
+      setLoadingPonds(true);
+      const data = await sensorService.getPondsByZone(selectedZoneId);
+      setFilterPonds(data);
+      setLoadingPonds(false);
+    };
+
+    fetchFilterPonds();
+  }, [selectedZoneId]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    if (selectedZoneId) {
+      params.set("zoneId", selectedZoneId);
+    } else {
+      params.delete("zoneId");
+    }
+
+    if (selectedPondId) {
+      params.set("pondId", selectedPondId);
+    } else {
+      params.delete("pondId");
+    }
+
+    setSearchParams(params);
+  }, [selectedZoneId, selectedPondId, setSearchParams]);
+
   // ===== FILTER =====
-  const filtered = devices.filter(
-    (d) =>
-      d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      d.feed_key.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (d.description ?? "").toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  const filtered = devices.filter((d) => {
+    if (selectedPondId && d.pond_id !== selectedPondId) return false;
+
+    const normalized = searchQuery.toLowerCase();
+    return (
+      d.name.toLowerCase().includes(normalized) ||
+      d.feed_key.toLowerCase().includes(normalized) ||
+      (d.description ?? "").toLowerCase().includes(normalized)
+    );
+  });
 
   // ===== HANDLERS =====
   const handleOpenCreate = () => {
@@ -148,6 +213,36 @@ export const DevicesPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <select
+            value={selectedZoneId}
+            onChange={(e) => {
+              setSelectedZoneId(e.target.value);
+              setSelectedPondId("");
+            }}
+            className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-emerald-400 w-44 transition-colors"
+          >
+            <option value="">Tất cả vùng</option>
+            {filterZones.map((zone) => (
+              <option key={zone.id} value={zone.id}>
+                {zone.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={selectedPondId}
+            onChange={(e) => setSelectedPondId(e.target.value)}
+            disabled={!selectedZoneId || loadingPonds}
+            className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-emerald-400 w-44 transition-colors disabled:opacity-60"
+          >
+            <option value="">Tất cả ao</option>
+            {filterPonds.map((pond) => (
+              <option key={pond.id} value={pond.id}>
+                {pond.name}
+              </option>
+            ))}
+          </select>
+
           {/* Search */}
           <div className="relative">
             <Search
