@@ -13,8 +13,13 @@
 
 const API_BASE = "http://localhost:5000";
 
-/** Reads the JWT from localStorage (stored by authService.login) */
+/** Reads the JWT stored by authService.login() */
 const getToken = (): string | null => {
+  // Primary: authService stores token here after login
+  const token = localStorage.getItem('accessToken');
+  if (token) return token;
+
+  // Fallback: check sessionStorage (legacy)
   try {
     return localStorage.getItem("accessToken");
   } catch {

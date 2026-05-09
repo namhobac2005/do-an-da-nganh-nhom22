@@ -3,13 +3,15 @@ import { AuthRequest } from '../middleware/auth.middleware';
 import * as zoneService from '../services/zone.service';
 
 /**
- * Lấy danh sách vùng nuôi theo quyền hạn của User
+ * Lấy danh sách vùng ao (pond) theo quyền hạn của User
  * GET /zones
+ * - Admin: xem toàn bộ
+ * - User: chỉ xem ponds đã được phân công
  */
 export const getAllZones = async (req: AuthRequest, res: Response) => {
   try {
-    // 1. Trích xuất userId đã được Middleware verifyToken giải mã và gán vào req.user
     const userId = req.user?.id;
+    const role   = req.user?.role;
 
     if (!userId) {
       return res.status(401).json({
@@ -18,8 +20,12 @@ export const getAllZones = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // 2. Gọi service để lấy danh sách đã lọc theo userId
-    const zones = await zoneService.listZones(userId);
+    // Admin sees everything, user sees only assigned ponds
+    const zones = role === 'admin'
+      ? await zoneService.listAllZones()
+      : await zoneService.listZones(userId);
+
+    console.log(`[GET /zones] role=${role}, userId=${userId}, returned ${zones.length} ponds`);
 
     return res.status(200).json({
       success: true,
@@ -29,18 +35,18 @@ export const getAllZones = async (req: AuthRequest, res: Response) => {
     console.error('Error in getAllZones:', error.message);
     return res.status(500).json({
       success: false,
-      message: 'Lỗi hệ thống khi lấy danh sách vùng nuôi.',
+      message: 'Lỗi hệ thống khi lấy danh sách vùng ao.',
     });
   }
 };
 
 /**
- * Lấy chi tiết một vùng nuôi
+ * Lấy chi tiết một vùng ao (pond)
  * GET /zones/:id
  */
 export const getZoneById = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const zone = await zoneService.getZoneById(id);
 
     return res.status(200).json({
@@ -50,30 +56,22 @@ export const getZoneById = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     return res.status(404).json({
       success: false,
-      message: 'Không tìm thấy vùng nuôi yêu cầu.',
+      message: 'Không tìm thấy vùng ao yêu cầu.',
     });
   }
 };
 
 /**
- * Tạo mới vùng nuôi (Chỉ Admin)
+ * Tạo mới vùng ao (Chỉ Admin)
  * POST /zones
  */
 export const createZone = async (req: AuthRequest, res: Response) => {
   try {
-    // 1. Tạo vùng nuôi mới
     const newZone = await zoneService.createZone(req.body);
-
-    // 2. Tự động gán quyền quản lý vùng này cho Admin vừa tạo (để hiện lên Dashboard ngay)
-    const userId = req.user?.id;
-    if (userId) {
-      // Bạn có thể bổ sung một hàm gán quyền nhanh trong zoneService nếu cần
-      // await zoneService.assignUserToZone(userId, newZone.id);
-    }
 
     return res.status(201).json({
       success: true,
-      message: 'Tạo vùng nuôi thành công.',
+      message: 'Tạo vùng ao thành công.',
       data: newZone,
     });
   } catch (error: any) {
@@ -85,17 +83,17 @@ export const createZone = async (req: AuthRequest, res: Response) => {
 };
 
 /**
- * Cập nhật vùng nuôi (Chỉ Admin)
+ * Cập nhật vùng ao (Chỉ Admin)
  * PUT /zones/:id
  */
 export const updateZone = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const updatedZone = await zoneService.updateZone(id, req.body);
 
     return res.status(200).json({
       success: true,
-      message: 'Cập nhật vùng nuôi thành công.',
+      message: 'Cập nhật vùng ao thành công.',
       data: updatedZone,
     });
   } catch (error: any) {
@@ -107,22 +105,41 @@ export const updateZone = async (req: AuthRequest, res: Response) => {
 };
 
 /**
- * Xóa vùng nuôi (Chỉ Admin)
+ * Xóa vùng ao (Chỉ Admin)
  * DELETE /zones/:id
  */
 export const deleteZone = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     await zoneService.deleteZone(id);
 
     return res.status(200).json({
       success: true,
-      message: 'Đã xóa vùng nuôi.',
+      message: 'Đã xóa vùng ao.',
     });
   } catch (error: any) {
     return res.status(500).json({
       success: false,
-      message: 'Không thể xóa vùng nuôi.',
+      message: 'Không thể xóa vùng ao.',
+    });
+  }
+};
+
+/**
+ * Lấy danh sách loại nuôi (farming_type) distinct
+ * GET /zones/farming-types
+ */
+export const getFarmingTypes = async (_req: AuthRequest, res: Response) => {
+  try {
+    const types = await zoneService.listFarmingTypes();
+    return res.status(200).json({
+      success: true,
+      data: types,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi lấy danh sách loại nuôi.',
     });
   }
 };

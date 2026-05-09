@@ -3,6 +3,10 @@
  * Business logic for UC15 (Threshold Management) & UC16 (Alert Logs).
  * All DB operations use supabaseAdmin (bypasses RLS).
  *
+ * DB Tables:
+ *   - public.threshold  → safety boundaries per metric/target
+ *   - public.alert_logs → historical alert records
+ *
  * KEY EXPORT: evaluateSensorData()
  *   Called by the Sensor module after each reading.
  *   Checks value against thresholds → inserts alert_log → emits ALERT_TRIGGERED event.
@@ -14,44 +18,56 @@ import { alertEmitter, type AlertTriggeredPayload } from '../lib/alert.events.ts
 // ===== TYPES =====
 
 export type TargetType = 'zone' | 'farming_type';
-export type Metric     = 'pH' | 'temperature' | 'DO';
+export type Metric = 'pH' | 'temperature' | 'DO';
 
 export interface Threshold {
-  id:          string;
+  id: string;
   target_type: TargetType;
-  target_id:   string;
-  metric:      Metric;
-  min_value:   number;
-  max_value:   number;
-  created_at:  string;
+  target_id: string;
+  metric: Metric;
+  min_value: number;
+  max_value: number;
+  created_at: string;
 }
 
 export interface AlertLog {
-  id:             string;
-  zone_id:        string | null;
-  metric:         string;
+  id: string;
+  zone_id: string | null;
+  metric: string;
   recorded_value: number;
-  reason:         string;
-  status:         'unread' | 'resolved';
-  created_at:     string;
+  reason: string;
+  status: 'unread' | 'resolved';
+  created_at: string;
 }
 
 export interface UpsertThresholdDto {
   target_type: TargetType;
-  target_id:   string;
-  metric:      Metric;
-  min_value:   number;
-  max_value:   number;
+  target_id: string;
+  metric: Metric;
+  min_value: number;
+  max_value: number;
 }
 
 // ===== THRESHOLD CRUD (UC15) =====
 
-export const listThresholds = async (): Promise<Threshold[]> => {
-  const { data, error } = await supabaseAdmin
+/**
+ * List all thresholds. If pondIds is provided, filter to only those ponds.
+ */
+export const listThresholds = async (pondIds?: string[]): Promise<Threshold[]> => {
+  let query = supabaseAdmin
     .from('thresholds')
     .select('*')
     .order('created_at', { ascending: false });
 
+  // Zone-based security: filter by pond IDs for non-admin users
+  if (pondIds && pondIds.length > 0) {
+    // Show thresholds that target one of the user's ponds OR are farming_type-level
+    query = query.or(
+      `target_type.eq.farming_type,and(target_type.eq.zone,target_id.in.(${pondIds.join(',')}))`
+    );
+  }
+
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data as Threshold[];
 };
@@ -81,10 +97,10 @@ export const upsertThreshold = async (dto: UpsertThresholdDto): Promise<Threshol
     .upsert(
       {
         target_type: dto.target_type,
-        target_id:   dto.target_id,
-        metric:      dto.metric,
-        min_value:   dto.min_value,
-        max_value:   dto.max_value,
+        target_id: dto.target_id,
+        metric: dto.metric,
+        min_value: dto.min_value,
+        max_value: dto.max_value,
       },
       { onConflict: 'target_type,target_id,metric' }
     )
@@ -105,22 +121,23 @@ export const deleteThreshold = async (id: string): Promise<void> => {
 export interface ListAlertLogsOptions {
   status?: 'unread' | 'resolved';
   zoneId?: string;
-  page?:   number;
-  limit?:  number;
+  pondIds?: string[];
+  page?: number;
+  limit?: number;
 }
 
 export interface AlertLogsPage {
-  data:  AlertLog[];
+  data: AlertLog[];
   total: number;
-  page:  number;
+  page: number;
   limit: number;
 }
 
 export const listAlertLogs = async (opts: ListAlertLogsOptions = {}): Promise<AlertLogsPage> => {
-  const page  = opts.page  ?? 1;
+  const page = opts.page ?? 1;
   const limit = opts.limit ?? 30;
-  const from  = (page - 1) * limit;
-  const to    = from + limit - 1;
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
 
   let query = supabaseAdmin
     .from('alert_logs')
@@ -131,18 +148,28 @@ export const listAlertLogs = async (opts: ListAlertLogsOptions = {}): Promise<Al
   if (opts.status) query = query.eq('status', opts.status);
   if (opts.zoneId) query = query.eq('zone_id', opts.zoneId);
 
+  // Zone-based security: filter by pond IDs for non-admin users
+  if (opts.pondIds && opts.pondIds.length > 0) {
+    query = query.in('zone_id', opts.pondIds);
+  }
+
   const { data, error, count } = await query;
   if (error) throw new Error(error.message);
 
   return { data: (data ?? []) as AlertLog[], total: count ?? 0, page, limit };
 };
 
-export const countUnread = async (): Promise<number> => {
-  const { count, error } = await supabaseAdmin
+export const countUnread = async (pondIds?: string[]): Promise<number> => {
+  let query = supabaseAdmin
     .from('alert_logs')
     .select('*', { count: 'exact', head: true })
     .eq('status', 'unread');
 
+  if (pondIds && pondIds.length > 0) {
+    query = query.in('zone_id', pondIds);
+  }
+
+  const { count, error } = await query;
   if (error) throw new Error(error.message);
   return count ?? 0;
 };
@@ -171,16 +198,16 @@ export const resolveAlert = async (id: string): Promise<AlertLog> => {
  *   import { evaluateSensorData } from '../services/alert.service.ts';
  *   await evaluateSensorData(zoneId, farmingType, 'pH', 7.8);
  *
- * @param zoneId       UUID of the zone the sensor belongs to
+ * @param zoneId       UUID of the pond the sensor belongs to
  * @param farmingType  Farming type label (e.g. "Tôm thẻ chân trắng"), or null
  * @param metric       'pH' | 'temperature' | 'DO'
  * @param value        The sensor reading
  */
 export const evaluateSensorData = async (
-  zoneId:      string,
+  zoneId: string,
   farmingType: string | null,
-  metric:      Metric,
-  value:       number
+  metric: Metric,
+  value: number
 ): Promise<AlertLog | null> => {
   // 1. Find the most specific applicable threshold (zone > farming_type)
   let threshold: Threshold | null = null;
@@ -222,11 +249,11 @@ export const evaluateSensorData = async (
   const { data: alertRow, error } = await supabaseAdmin
     .from('alert_logs')
     .insert({
-      zone_id:        zoneId,
-      metric:         metric,
+      zone_id: zoneId,
+      metric: metric,
       recorded_value: value,
-      reason:         reason,
-      status:         'unread',
+      reason: reason,
+      status: 'unread',
     })
     .select()
     .single();
@@ -240,14 +267,14 @@ export const evaluateSensorData = async (
 
   // 4. Emit event for Actuator module to subscribe to
   const payload: AlertTriggeredPayload = {
-    alertId:       alert.id,
-    zoneId:        zoneId,
-    metric:        metric,
+    alertId: alert.id,
+    zoneId: zoneId,
+    metric: metric,
     recordedValue: value,
-    minValue:      threshold.min_value,
-    maxValue:      threshold.max_value,
-    reason:        reason,
-    triggeredAt:   alert.created_at,
+    minValue: threshold.min_value,
+    maxValue: threshold.max_value,
+    reason: reason,
+    triggeredAt: alert.created_at,
   };
   alertEmitter.emit('ALERT_TRIGGERED', payload);
 

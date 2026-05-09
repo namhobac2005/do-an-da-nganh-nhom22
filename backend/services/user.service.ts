@@ -3,12 +3,18 @@
  * Business logic for User (profile) management.
  *
  * All Supabase DB operations use `supabaseAdmin` (service-role key) so they
- * bypass Row Level Security policies on public.profiles and public.user_zones.
+ * bypass Row Level Security policies on public.user and public.user_ponds.
+ *
+ * DB Tables:
+ *   - public.users     → user accounts
+ *   - public.user_ponds → many-to-many user ↔ pond assignment
+ *   - public.ponds      → pond master data
  *
  * Requires: SUPABASE_SERVICE_ROLE_KEY in backend/.env
  */
 
 import { supabaseAdmin } from '../lib/supabase.client.ts';
+import bcrypt from 'bcrypt';
 
 // ===== TYPES =====
 
@@ -21,7 +27,7 @@ export interface UserProfile {
   status:     'active' | 'inactive';
   created_at: string;
   updated_at: string;
-  zones:      { id: string; name: string }[];
+  ponds:      { id: string; name: string }[];
 }
 
 export interface CreateUserDto {
@@ -30,7 +36,7 @@ export interface CreateUserDto {
   fullName?: string;
   phone?:    string;
   role?:     'admin' | 'user';
-  zoneIds?:  string[];
+  pondIds?:  string[];
 }
 
 export interface UpdateUserDto {
@@ -38,41 +44,43 @@ export interface UpdateUserDto {
   phone?:    string;
   role?:     'admin' | 'user';
   status?:   'active' | 'inactive';
-  zoneIds?:  string[];
+  pondIds?:  string[];
 }
 
 // ===== HELPERS =====
 
+const SALT_ROUNDS = 10;
+
 /**
- * Enriches profile rows with their assigned zones.
+ * Enriches user rows with their assigned ponds.
  * All queries use supabaseAdmin to bypass RLS.
  */
-const enrichWithZones = async (profiles: any[]): Promise<UserProfile[]> => {
-  if (!profiles.length) return [];
+const enrichWithPonds = async (users: any[]): Promise<UserProfile[]> => {
+  if (!users.length) return [];
 
-  const ids = profiles.map((p) => p.id);
+  const ids = users.map((u) => u.id);
 
-  const { data: userZones, error: uzErr } = await supabaseAdmin
-    .from('user_zones')
-    .select('user_id, zones(id, name)')
+  const { data: userPonds, error: upErr } = await supabaseAdmin
+    .from('user_ponds')
+    .select('user_id, ponds(id, name)')
     .in('user_id', ids);
 
-  if (uzErr) throw new Error(uzErr.message);
+  if (upErr) throw new Error(upErr.message);
 
-  // Group zones by user_id
-  const zonesMap = new Map<string, { id: string; name: string }[]>();
-  (userZones ?? []).forEach((uz: any) => {
-    const zone = uz.zones;
-    if (!zone) return;
-    const existing = zonesMap.get(uz.user_id) ?? [];
-    existing.push(zone);
-    zonesMap.set(uz.user_id, existing);
+  // Group ponds by user_id
+  const pondsMap = new Map<string, { id: string; name: string }[]>();
+  (userPonds ?? []).forEach((up: any) => {
+    const pond = up.ponds;
+    if (!pond) return;
+    const existing = pondsMap.get(up.user_id) ?? [];
+    existing.push(pond);
+    pondsMap.set(up.user_id, existing);
   });
 
-  return profiles.map((p) => ({
-    ...p,
-    email: p.email ?? '',
-    zones: zonesMap.get(p.id) ?? [],
+  return users.map((u) => ({
+    ...u,
+    email: u.email ?? '',
+    ponds: pondsMap.get(u.id) ?? [],
   }));
 };
 
@@ -80,60 +88,53 @@ const enrichWithZones = async (profiles: any[]): Promise<UserProfile[]> => {
 
 export const listUsers = async (): Promise<UserProfile[]> => {
   const { data, error } = await supabaseAdmin
-    .from('profiles')
+    .from('users')
     .select('*')
     .order('created_at', { ascending: false });
 
   if (error) throw new Error(error.message);
-  return enrichWithZones(data ?? []);
+  return enrichWithPonds(data ?? []);
 };
 
 export const getUserById = async (id: string): Promise<UserProfile> => {
   const { data, error } = await supabaseAdmin
-    .from('profiles')
+    .from('users')
     .select('*')
     .eq('id', id)
     .single();
 
   if (error) throw new Error(error.message);
-  const [enriched] = await enrichWithZones([data]);
+  const [enriched] = await enrichWithPonds([data]);
   return enriched;
 };
 
 export const createUser = async (dto: CreateUserDto): Promise<UserProfile> => {
-  // STEP 1 — Create auth identity via Admin API (requires service-role key)
-  const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-    email:         dto.email,
-    password:      dto.password,
-    email_confirm: true,   // skip confirmation email — account is active immediately
-  });
+  // STEP 1 — Hash password
+  const hashedPassword = await bcrypt.hash(dto.password, SALT_ROUNDS);
 
-  if (authErr || !authData.user) {
-    // Surface common errors clearly (e.g. "User already registered")
-    throw new Error(authErr?.message ?? 'Không thể tạo tài khoản xác thực.');
+  // STEP 2 — Insert user row directly into public.users table
+  const { data: newUser, error: userErr } = await supabaseAdmin
+    .from('users')
+    .insert({
+      email:     dto.email,
+      password:  hashedPassword,
+      full_name: dto.fullName ?? null,
+      phone:     dto.phone    ?? null,
+      role:      dto.role     ?? 'user',
+      status:    'active',
+    })
+    .select()
+    .single();
+
+  if (userErr) {
+    throw new Error(`Tạo tài khoản thất bại: ${userErr.message}`);
   }
 
-  const userId = authData.user.id;
+  const userId = newUser.id;
 
-  // STEP 2 — Insert profile row using Admin client → bypasses RLS
-  const { error: profileErr } = await supabaseAdmin.from('profiles').insert({
-    id:        userId,
-    email:     dto.email,           // cached for fast lookups without hitting auth API
-    full_name: dto.fullName ?? null,
-    phone:     dto.phone    ?? null,
-    role:      dto.role     ?? 'user',
-    status:    'active',
-  });
-
-  if (profileErr) {
-    // Roll back: remove the auth user so we don't orphan it
-    await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => null);
-    throw new Error(`Tạo hồ sơ người dùng thất bại: ${profileErr.message}`);
-  }
-
-  // STEP 3 — Assign zones if provided
-  if (dto.zoneIds && dto.zoneIds.length > 0) {
-    await updateUserZones(userId, dto.zoneIds);
+  // STEP 3 — Assign ponds if provided
+  if (dto.pondIds && dto.pondIds.length > 0) {
+    await updateUserPonds(userId, dto.pondIds);
   }
 
   return getUserById(userId);
@@ -143,49 +144,53 @@ export const updateUser = async (
   id: string,
   dto: UpdateUserDto
 ): Promise<UserProfile> => {
-  const profileUpdate: Record<string, any> = {};
-  if (dto.fullName !== undefined) profileUpdate.full_name = dto.fullName;
-  if (dto.phone    !== undefined) profileUpdate.phone     = dto.phone;
-  if (dto.role     !== undefined) profileUpdate.role      = dto.role;
-  if (dto.status   !== undefined) profileUpdate.status    = dto.status;
+  const userUpdate: Record<string, any> = {};
+  if (dto.fullName !== undefined) userUpdate.full_name = dto.fullName;
+  if (dto.phone    !== undefined) userUpdate.phone     = dto.phone;
+  if (dto.role     !== undefined) userUpdate.role      = dto.role;
+  if (dto.status   !== undefined) userUpdate.status    = dto.status;
 
-  if (Object.keys(profileUpdate).length > 0) {
+  if (Object.keys(userUpdate).length > 0) {
     const { error } = await supabaseAdmin
-      .from('profiles')
-      .update(profileUpdate)
+      .from('users')
+      .update(userUpdate)
       .eq('id', id);
 
     if (error) throw new Error(error.message);
   }
 
-  if (dto.zoneIds !== undefined) {
-    await updateUserZones(id, dto.zoneIds);
+  if (dto.pondIds !== undefined) {
+    await updateUserPonds(id, dto.pondIds);
   }
 
   return getUserById(id);
 };
 
 export const deleteUser = async (id: string): Promise<void> => {
-  // Hard-delete from Supabase Auth — profiles & user_zones cascade via FK
-  const { error } = await supabaseAdmin.auth.admin.deleteUser(id);
+  // Delete user from public.users — user_ponds cascade via FK
+  const { error } = await supabaseAdmin
+    .from('users')
+    .delete()
+    .eq('id', id);
+
   if (error) throw new Error(error.message);
 };
 
-export const updateUserZones = async (
+export const updateUserPonds = async (
   userId: string,
-  zoneIds: string[]
+  pondIds: string[]
 ): Promise<void> => {
-  // Replace all zone assignments atomically
+  // Replace all pond assignments atomically
   const { error: deleteErr } = await supabaseAdmin
-    .from('user_zones')
+    .from('user_ponds')
     .delete()
     .eq('user_id', userId);
 
   if (deleteErr) throw new Error(deleteErr.message);
 
-  if (zoneIds.length === 0) return;
+  if (pondIds.length === 0) return;
 
-  const rows = zoneIds.map((zoneId) => ({ user_id: userId, zone_id: zoneId }));
-  const { error: insertErr } = await supabaseAdmin.from('user_zones').insert(rows);
+  const rows = pondIds.map((pondId) => ({ user_id: userId, pond_id: pondId }));
+  const { error: insertErr } = await supabaseAdmin.from('user_ponds').insert(rows);
   if (insertErr) throw new Error(insertErr.message);
 };

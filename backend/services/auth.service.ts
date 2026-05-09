@@ -11,7 +11,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key';
 
 export class AuthService {
   static async login(email: string, password: string) {
-    // 1. Tìm user trong bảng public.users
+    // 1. Tìm user trong bảng public.user
     const { data: user, error } = await supabase
       .from('users')
       .select('*')

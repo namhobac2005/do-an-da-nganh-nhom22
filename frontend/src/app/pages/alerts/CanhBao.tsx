@@ -1,426 +1,488 @@
 /**
  * CanhBao.tsx
- * Module Cảnh Báo & Ngưỡng Thiết Lập
- * - Bảng hiển thị nhật ký cảnh báo
- * - Form thiết lập ngưỡng cảnh báo (Threshold)
+ * Module Cảnh Báo & Ngưỡng Thiết Lập (cho tất cả user)
+ * - Tab 1: Thiết lập ngưỡng (Threshold)
+ * - Tab 2: Nhật ký cảnh báo (Alert Logs)
+ *
+ * Fully connected to the backend API. No mock data.
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
 import {
   AlertTriangle,
   CheckCircle2,
-  Info,
   BellRing,
   Settings,
-  Filter,
-  Check,
-  X,
-  ThermometerSun,
-  Droplets,
-  Wind,
-  Activity,
+  Bell,
+  Plus,
+  Trash2,
+  RefreshCw,
+  Loader2,
+  ShieldAlert,
+  ChevronLeft,
   ChevronRight,
+  Settings2,
+  AlertCircle,
 } from 'lucide-react';
-import { MOCK_ALERTS, MOCK_SENSORS, MOCK_PONDS, type Alert } from '../../data/mockData';
+import * as alertService from '../../services/alertService';
+import * as zoneService from '../../services/zoneService';
+import type { Threshold, AlertLog, Metric, TargetType } from '../../services/alertService';
+import type { Zone } from '../../types/user.types';
 
-// ===== THRESHOLD FORM =====
+// ===== CONSTANTS =====
 
-interface Threshold {
-  sensorType: string;
-  minValue: number;
-  maxValue: number;
-  unit: string;
-}
-
-const SENSOR_CONFIGS: Threshold[] = [
-  { sensorType: 'Nhiệt độ', minValue: 25, maxValue: 33, unit: '°C' },
-  { sensorType: 'pH', minValue: 7.0, maxValue: 8.5, unit: '' },
-  { sensorType: 'DO (Oxy hòa tan)', minValue: 4.0, maxValue: 8.0, unit: 'mg/L' },
-  { sensorType: 'Độ đục', minValue: 15, maxValue: 50, unit: 'NTU' },
-  { sensorType: 'Độ mặn', minValue: 5, maxValue: 25, unit: '‰' },
-  { sensorType: 'Amoniac (NH₃)', minValue: 0, maxValue: 0.5, unit: 'mg/L' },
+const METRICS: { value: Metric; label: string; unit: string }[] = [
+  { value: 'pH',          label: 'pH',                  unit: '' },
+  { value: 'temperature', label: 'Nhiệt độ',            unit: '°C' },
+  { value: 'DO',          label: 'Ô xy hoà tan (DO)',   unit: 'mg/L' },
 ];
 
-const ThresholdForm: React.FC = () => {
-  const [thresholds, setThresholds] = useState<Threshold[]>(SENSOR_CONFIGS);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+const STATUS_MAP = {
+  unread:   { label: 'Chưa xử lý', bg: 'bg-red-100',     text: 'text-red-700' },
+  resolved: { label: 'Đã xử lý',   bg: 'bg-emerald-100', text: 'text-emerald-700' },
+};
 
-  const handleUpdate = (index: number, field: 'minValue' | 'maxValue', value: string) => {
-    setThresholds((prev) =>
-      prev.map((t, i) => (i === index ? { ...t, [field]: parseFloat(value) || 0 } : t))
-    );
-    setSaved(false);
+// ===== TAB 1: THRESHOLD SETTINGS =====
+
+interface ThresholdFormValues {
+  target_type: TargetType;
+  target_id:   string;
+  metric:      Metric;
+  min_value:   string;
+  max_value:   string;
+}
+
+const ThresholdTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
+  const [thresholds,   setThresholds]   = useState<Threshold[]>([]);
+  const [isLoading,    setIsLoading]    = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fetchThresholds = useCallback(async () => {
+    setIsLoading(true);
+    try { setThresholds(await alertService.getThresholds()); }
+    catch { toast.error('Không thể tải ngưỡng cảnh báo.'); }
+    finally { setIsLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchThresholds(); }, [fetchThresholds]);
+
+  const { register, handleSubmit, watch, formState: { errors }, reset } =
+    useForm<ThresholdFormValues>({
+      defaultValues: { target_type: 'zone', target_id: '', metric: 'pH', min_value: '', max_value: '' },
+    });
+
+  const targetType = watch('target_type');
+  const minVal     = watch('min_value');
+  const maxVal     = watch('max_value');
+  const minMaxErr  = minVal && maxVal && Number(minVal) >= Number(maxVal);
+
+  const onSubmit = async (vals: ThresholdFormValues) => {
+    if (minMaxErr) return;
+    setIsSubmitting(true);
+    try {
+      const saved = await alertService.upsertThreshold({
+        target_type: vals.target_type,
+        target_id:   vals.target_id,
+        metric:      vals.metric,
+        min_value:   Number(vals.min_value),
+        max_value:   Number(vals.max_value),
+      });
+      setThresholds((prev) => {
+        const idx = prev.findIndex((t) => t.id === saved.id);
+        return idx >= 0 ? prev.map((t) => t.id === saved.id ? saved : t) : [saved, ...prev];
+      });
+      reset();
+      toast.success('Đã lưu ngưỡng cảnh báo.');
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    setIsSaving(false);
-    setSaved(true);
+  const handleDelete = async (id: string) => {
+    if (!confirm('Xóa ngưỡng này?')) return;
+    try {
+      await alertService.deleteThreshold(id);
+      setThresholds((prev) => prev.filter((t) => t.id !== id));
+      toast.success('Đã xóa ngưỡng.');
+    } catch (err: any) { toast.error(err.message); }
   };
 
-  const sensorIcons: Record<string, React.ReactNode> = {
-    'Nhiệt độ': <ThermometerSun size={16} />,
-    'pH': <Droplets size={16} />,
-    'DO (Oxy hòa tan)': <Wind size={16} />,
-    'Độ đục': <Activity size={16} />,
-    'Độ mặn': <Droplets size={16} />,
-    'Amoniac (NH₃)': <AlertTriangle size={16} />,
-  };
+  const inputCls = (hasErr?: boolean) =>
+    `w-full border rounded-lg px-3 py-2 text-sm text-gray-800 outline-none focus:ring-2 transition-all ${
+      hasErr ? 'border-red-400 focus:border-red-400 focus:ring-red-100'
+             : 'border-gray-200 focus:border-emerald-400 focus:ring-emerald-100'
+    }`;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-      <div className="flex items-center gap-3 mb-5">
-        <div className="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center">
-          <Settings size={18} className="text-amber-600" />
-        </div>
-        <div>
-          <h3 className="text-gray-900" style={{ fontSize: '15px', fontWeight: 600 }}>
-            Thiết Lập Ngưỡng Cảnh Báo
-          </h3>
-          <p className="text-gray-400" style={{ fontSize: '12px' }}>
-            Hệ thống sẽ tự động cảnh báo khi giá trị vượt ngưỡng
-          </p>
-        </div>
-      </div>
+    <div className="space-y-5">
+      {/* Form */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <h2 className="text-gray-800 text-sm font-semibold flex items-center gap-2 mb-5">
+          <Plus size={15} className="text-emerald-600" />
+          Thêm / cập nhật ngưỡng cảnh báo
+        </h2>
+        <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Target type */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Áp dụng cho</label>
+            <select {...register('target_type')} className={inputCls()}>
+              <option value="zone">Vùng ao cụ thể</option>
+              <option value="farming_type">Loại nuôi</option>
+            </select>
+          </div>
 
-      <div className="space-y-3">
-        {thresholds.map((threshold, index) => (
-          <div key={threshold.sensorType} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
-            <div className="flex items-center gap-2 w-44 shrink-0">
-              <span className="text-gray-500">{sensorIcons[threshold.sensorType]}</span>
-              <span className="text-gray-700" style={{ fontSize: '13px', fontWeight: 500 }}>
-                {threshold.sensorType}
-              </span>
+          {/* Target id */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">
+              {targetType === 'zone' ? 'Chọn vùng ao' : 'Nhập loại nuôi'}
+              <span className="text-red-500 ml-0.5">*</span>
+            </label>
+            {targetType === 'zone' ? (
+              <select
+                {...register('target_id', { required: 'Vui lòng chọn vùng ao.' })}
+                className={inputCls(!!errors.target_id)}
+              >
+                <option value="">— Chọn vùng ao —</option>
+                {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+              </select>
+            ) : (
+              <input
+                {...register('target_id', { required: 'Vui lòng nhập loại nuôi.' })}
+                placeholder="VD: Tôm thẻ chân trắng"
+                className={inputCls(!!errors.target_id)}
+              />
+            )}
+            {errors.target_id && <p className="text-red-500 text-xs mt-1">{errors.target_id.message}</p>}
+          </div>
+
+          {/* Metric */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Chỉ số <span className="text-red-500">*</span></label>
+            <select {...register('metric')} className={inputCls()}>
+              {METRICS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </div>
+
+          {/* Min / Max */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Ngưỡng dưới <span className="text-red-500">*</span></label>
+              <input
+                type="number" step="any"
+                {...register('min_value', { required: 'Bắt buộc.' })}
+                placeholder="0"
+                className={inputCls(!!errors.min_value || !!minMaxErr)}
+              />
+              {errors.min_value && <p className="text-red-500 text-xs mt-1">{errors.min_value.message}</p>}
             </div>
-            <div className="flex-1 flex items-center gap-2">
-              <span className="text-gray-400" style={{ fontSize: '12px' }}>Min:</span>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Ngưỡng trên <span className="text-red-500">*</span></label>
               <input
-                type="number"
-                step="0.1"
-                value={threshold.minValue}
-                onChange={(e) => handleUpdate(index, 'minValue', e.target.value)}
-                className="w-20 bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-800 outline-none focus:border-amber-400 text-center"
-                style={{ fontSize: '13px' }}
+                type="number" step="any"
+                {...register('max_value', { required: 'Bắt buộc.' })}
+                placeholder="14"
+                className={inputCls(!!errors.max_value || !!minMaxErr)}
               />
-              <span className="text-gray-400" style={{ fontSize: '12px' }}>Max:</span>
-              <input
-                type="number"
-                step="0.1"
-                value={threshold.maxValue}
-                onChange={(e) => handleUpdate(index, 'maxValue', e.target.value)}
-                className="w-20 bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-800 outline-none focus:border-amber-400 text-center"
-                style={{ fontSize: '13px' }}
-              />
-              {threshold.unit && (
-                <span className="text-gray-500 bg-white border border-gray-200 rounded-lg px-2 py-1.5"
-                  style={{ fontSize: '12px' }}>
-                  {threshold.unit}
-                </span>
-              )}
+              {errors.max_value && <p className="text-red-500 text-xs mt-1">{errors.max_value.message}</p>}
             </div>
           </div>
-        ))}
+
+          {/* Validation error */}
+          {minMaxErr && (
+            <div className="sm:col-span-2">
+              <p className="text-red-500 text-xs font-semibold">⚠ Ngưỡng dưới không được lớn hơn hoặc bằng ngưỡng trên.</p>
+            </div>
+          )}
+
+          <div className="sm:col-span-2 flex justify-end">
+            <button
+              type="submit"
+              disabled={isSubmitting || !!minMaxErr}
+              className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isSubmitting && <Loader2 size={14} className="animate-spin" />}
+              Lưu ngưỡng
+            </button>
+          </div>
+        </form>
       </div>
 
-      <div className="mt-4 flex justify-end">
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-white transition-colors ${
-            saved ? 'bg-emerald-600' : 'bg-amber-600 hover:bg-amber-700'
-          } disabled:opacity-60`}
-          style={{ fontWeight: 600 }}
-        >
-          {isSaving ? (
-            <>
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Đang lưu...
-            </>
-          ) : saved ? (
-            <>
-              <CheckCircle2 size={16} />
-              Đã lưu thành công!
-            </>
-          ) : (
-            'Lưu Ngưỡng Cảnh Báo'
-          )}
-        </button>
+      {/* Active thresholds list */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-gray-800 text-sm font-semibold">Ngưỡng đang áp dụng</h2>
+          <button onClick={fetchThresholds} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-50">
+            <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gray-50/60 border-b border-gray-100">
+                {['Đối tượng', 'Loại', 'Chỉ số', 'Ngưỡng dưới', 'Ngưỡng trên', ''].map((h) => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {isLoading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <tr key={i}>{Array.from({ length: 6 }).map((__, j) => (
+                    <td key={j} className="px-4 py-3"><div className="h-4 bg-gray-100 rounded animate-pulse" /></td>
+                  ))}</tr>
+                ))
+              ) : thresholds.length === 0 ? (
+                <tr><td colSpan={6} className="py-12 text-center text-gray-400 text-sm">Chưa có ngưỡng nào được thiết lập.</td></tr>
+              ) : (
+                thresholds.map((t) => {
+                  const metric = METRICS.find((m) => m.value === t.metric);
+                  const zoneName = t.target_type === 'zone'
+                    ? zones.find((z) => z.id === t.target_id)?.name ?? t.target_id.slice(0, 8)
+                    : t.target_id;
+                  return (
+                    <tr key={t.id} className="hover:bg-gray-50/60 transition-colors">
+                      <td className="px-4 py-3 text-sm text-gray-700 font-medium">{zoneName}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                          t.target_type === 'zone' ? 'bg-teal-100 text-teal-700' : 'bg-purple-100 text-purple-700'
+                        }`}>
+                          {t.target_type === 'zone' ? 'Vùng ao' : 'Loại nuôi'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{metric?.label ?? t.metric}</td>
+                      <td className="px-4 py-3 text-sm text-blue-700 font-semibold">{t.min_value} {metric?.unit}</td>
+                      <td className="px-4 py-3 text-sm text-red-600 font-semibold">{t.max_value} {metric?.unit}</td>
+                      <td className="px-4 py-3">
+                        <button onClick={() => handleDelete(t.id)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition-colors">
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 };
 
-// ===== ALERT TABLE =====
+// ===== TAB 2: ALERT LOGS =====
 
-const SEVERITY_CONFIG = {
-  critical: { label: 'NGUY CẤP', bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-200', icon: <AlertTriangle size={14} /> },
-  warning:  { label: 'CẢNH BÁO', bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-200', icon: <AlertTriangle size={14} /> },
-  info:     { label: 'THÔNG TIN', bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-200', icon: <Info size={14} /> },
+const AlertLogsTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
+  const [logs,      setLogs]      = useState<AlertLog[]>([]);
+  const [total,     setTotal]     = useState(0);
+  const [page,      setPage]      = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const LIMIT = 20;
+
+  const fetchLogs = useCallback(async (p: number) => {
+    setIsLoading(true);
+    try {
+      const result = await alertService.getAlertLogs({ page: p, limit: LIMIT });
+      setLogs(result.data);
+      setTotal(result.total);
+      setPage(result.page);
+    } catch { toast.error('Không thể tải nhật ký cảnh báo.'); }
+    finally { setIsLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchLogs(1); }, [fetchLogs]);
+
+  const handleResolve = async (id: string) => {
+    try {
+      const updated = await alertService.resolveAlert(id);
+      setLogs((prev) => prev.map((l) => l.id === updated.id ? updated : l));
+      toast.success('Đã đánh dấu xử lý.');
+    } catch (err: any) { toast.error(err.message); }
+  };
+
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+        <h2 className="text-gray-800 text-sm font-semibold flex items-center gap-2">
+          <ShieldAlert size={15} className="text-red-500" />
+          Nhật ký cảnh báo · {total} bản ghi
+        </h2>
+        <button onClick={() => fetchLogs(page)} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-50">
+          <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
+        </button>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-gray-50/60 border-b border-gray-100">
+              {['Thời gian', 'Vùng ao', 'Chỉ số', 'Giá trị', 'Lý do', 'Trạng thái', 'Thao tác'].map((h) => (
+                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {isLoading ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <tr key={i}>{Array.from({ length: 7 }).map((__, j) => (
+                  <td key={j} className="px-4 py-3"><div className="h-4 bg-gray-100 rounded animate-pulse" /></td>
+                ))}</tr>
+              ))
+            ) : logs.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-16 text-center">
+                  <Bell size={28} className="mx-auto mb-2 text-gray-200" />
+                  <p className="text-gray-400 text-sm">Chưa có cảnh báo nào</p>
+                </td>
+              </tr>
+            ) : (
+              logs.map((log) => {
+                const st       = STATUS_MAP[log.status];
+                const metric   = METRICS.find((m) => m.value === log.metric);
+                const zoneName = zones.find((z) => z.id === log.zone_id)?.name ?? log.zone_id?.slice(0, 8) ?? '—';
+                const dt       = new Date(log.created_at);
+                return (
+                  <tr key={log.id} className={`hover:bg-gray-50/60 transition-colors ${log.status === 'unread' ? 'bg-red-50/30' : ''}`}>
+                    <td className="px-4 py-3 text-xs text-gray-500">
+                      <p className="font-medium text-gray-700">{dt.toLocaleDateString('vi-VN')}</p>
+                      <p>{dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{zoneName}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{metric?.label ?? log.metric}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-red-600">{log.recorded_value} {metric?.unit}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 max-w-[180px] truncate" title={log.reason}>{log.reason}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${st.bg} ${st.text}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full ${log.status === 'unread' ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                        {st.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {log.status === 'unread' && (
+                        <button
+                          onClick={() => handleResolve(log.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition-colors"
+                        >
+                          <CheckCircle2 size={12} />
+                          Đã xử lý
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-5 py-3.5 border-t border-gray-100 bg-gray-50/40">
+          <p className="text-xs text-gray-400">Trang {page} / {totalPages}</p>
+          <div className="flex gap-1.5">
+            <button onClick={() => fetchLogs(page - 1)} disabled={page <= 1}
+              className="p-1.5 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-40">
+              <ChevronLeft size={14} />
+            </button>
+            <button onClick={() => fetchLogs(page + 1)} disabled={page >= totalPages}
+              className="p-1.5 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-40">
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 // ===== MAIN COMPONENT =====
 
+type Tab = 'threshold' | 'log';
+
 export const CanhBao: React.FC = () => {
-  const [alerts, setAlerts] = useState<Alert[]>(MOCK_ALERTS);
-  const [activeTab, setActiveTab] = useState<'log' | 'threshold'>('log');
-  const [filterSeverity, setFilterSeverity] = useState<string>('all');
-  const [filterRead, setFilterRead] = useState<string>('all');
-  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>('log');
+  const [zones,     setZones]     = useState<Zone[]>([]);
+  const [unread,    setUnread]    = useState(0);
 
-  // Đánh dấu đã đọc
-  const markAsRead = (alertId: string) => {
-    setAlerts((prev) => prev.map((a) => (a.id === alertId ? { ...a, isRead: true } : a)));
-  };
+  useEffect(() => {
+    zoneService.getZones().then(setZones).catch(() => null);
+    alertService.getUnreadCount().then(setUnread).catch(() => null);
+  }, []);
 
-  // Đánh dấu đã xử lý
-  const markAsResolved = (alertId: string) => {
-    setAlerts((prev) => prev.map((a) => (a.id === alertId ? { ...a, isResolved: true, isRead: true } : a)));
-    if (selectedAlert?.id === alertId) {
-      setSelectedAlert((prev) => prev ? { ...prev, isResolved: true } : null);
-    }
-  };
-
-  // Đánh dấu tất cả đã đọc
-  const markAllRead = () => {
-    setAlerts((prev) => prev.map((a) => ({ ...a, isRead: true })));
-  };
-
-  const filteredAlerts = alerts.filter((a) => {
-    if (filterSeverity !== 'all' && a.severity !== filterSeverity) return false;
-    if (filterRead === 'unread' && a.isRead) return false;
-    if (filterRead === 'read' && !a.isRead) return false;
-    return true;
-  });
-
-  const unreadCount = alerts.filter((a) => !a.isRead).length;
-  const criticalCount = alerts.filter((a) => a.severity === 'critical' && !a.isResolved).length;
+  const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
+    { key: 'log',       label: 'Nhật ký cảnh báo',  icon: <AlertCircle size={15} /> },
+    { key: 'threshold', label: 'Thiết lập ngưỡng',  icon: <Settings2  size={15} /> },
+  ];
 
   return (
     <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-gray-900 text-xl font-bold flex items-center gap-2">
+            <Bell size={20} className="text-red-500" />
+            Cảnh báo & Ngưỡng
+          </h1>
+          <p className="text-gray-400 text-sm mt-0.5">
+            Quản lý ngưỡng cảnh báo và nhật ký sự kiện
+          </p>
+        </div>
+        {unread > 0 && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-xl">
+            <ShieldAlert size={15} className="text-red-500" />
+            <span className="text-red-700 text-sm font-semibold">{unread} cảnh báo chưa xử lý</span>
+          </div>
+        )}
+      </div>
+
       {/* Summary Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[
-          { label: 'Tổng cảnh báo', value: alerts.length, color: 'text-gray-700', bg: 'bg-gray-50' },
-          { label: 'Nguy cấp', value: criticalCount, color: 'text-red-700', bg: 'bg-red-50' },
-          { label: 'Chưa đọc', value: unreadCount, color: 'text-amber-700', bg: 'bg-amber-50' },
-          { label: 'Đã xử lý', value: alerts.filter((a) => a.isResolved).length, color: 'text-emerald-700', bg: 'bg-emerald-50' },
+          { label: 'Chưa xử lý', value: unread, color: 'text-red-700', bg: 'bg-red-50', icon: <AlertTriangle size={20} /> },
+          { label: 'Vùng ao', value: zones.length, color: 'text-teal-700', bg: 'bg-teal-50', icon: <BellRing size={20} /> },
+          { label: 'Thiết lập', value: '—', color: 'text-amber-700', bg: 'bg-amber-50', icon: <Settings size={20} /> },
         ].map((s) => (
-          <div key={s.label} className={`${s.bg} rounded-xl p-4 text-center`}>
-            <p className={s.color} style={{ fontSize: '26px', fontWeight: 700 }}>{s.value}</p>
-            <p className="text-gray-500" style={{ fontSize: '12px' }}>{s.label}</p>
+          <div key={s.label} className={`${s.bg} rounded-xl p-4 flex items-center gap-3`}>
+            <div className={`${s.color} opacity-70`}>{s.icon}</div>
+            <div>
+              <p className={`${s.color} text-xl font-bold leading-tight`}>{s.value}</p>
+              <p className="text-gray-500 text-xs mt-0.5">{s.label}</p>
+            </div>
           </div>
         ))}
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-        {[
-          { key: 'log', label: '📋 Nhật ký cảnh báo', badge: unreadCount },
-          { key: 'threshold', label: '⚙️ Thiết lập ngưỡng' },
-        ].map((tab) => (
+        {tabs.map((t) => (
           <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key as 'log' | 'threshold')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-              activeTab === tab.key
-                ? 'bg-white shadow-sm text-gray-900'
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === t.key
+                ? 'bg-white text-gray-900 shadow-sm'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
-            style={{ fontSize: '13px', fontWeight: activeTab === tab.key ? 600 : 400 }}
           >
-            {tab.label}
-            {tab.badge && tab.badge > 0 ? (
-              <span className="bg-red-500 text-white rounded-full px-1.5 py-0.5" style={{ fontSize: '10px', fontWeight: 700 }}>
-                {tab.badge}
+            {t.icon}
+            {t.label}
+            {t.key === 'log' && unread > 0 && (
+              <span className="bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">
+                {unread > 9 ? '9+' : unread}
               </span>
-            ) : null}
+            )}
           </button>
         ))}
       </div>
 
-      {activeTab === 'log' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {/* Alert List */}
-          <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            {/* Filter Bar */}
-            <div className="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center gap-3">
-              <Filter size={15} className="text-gray-400" />
-              <select
-                value={filterSeverity}
-                onChange={(e) => setFilterSeverity(e.target.value)}
-                className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 outline-none"
-                style={{ fontSize: '13px' }}
-              >
-                <option value="all">Tất cả mức độ</option>
-                <option value="critical">Nguy cấp</option>
-                <option value="warning">Cảnh báo</option>
-                <option value="info">Thông tin</option>
-              </select>
-              <select
-                value={filterRead}
-                onChange={(e) => setFilterRead(e.target.value)}
-                className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 outline-none"
-                style={{ fontSize: '13px' }}
-              >
-                <option value="all">Tất cả</option>
-                <option value="unread">Chưa đọc</option>
-                <option value="read">Đã đọc</option>
-              </select>
-              {unreadCount > 0 && (
-                <button
-                  onClick={markAllRead}
-                  className="ml-auto flex items-center gap-1.5 text-emerald-600 hover:underline"
-                  style={{ fontSize: '13px' }}
-                >
-                  <Check size={14} />
-                  Đánh dấu tất cả đã đọc
-                </button>
-              )}
-            </div>
-
-            {/* Alert Items */}
-            <div className="divide-y divide-gray-50">
-              {filteredAlerts.map((alert) => {
-                const config = SEVERITY_CONFIG[alert.severity];
-                return (
-                  <div
-                    key={alert.id}
-                    onClick={() => { setSelectedAlert(alert); markAsRead(alert.id); }}
-                    className={`flex items-start gap-4 p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
-                      selectedAlert?.id === alert.id ? 'bg-blue-50' : ''
-                    }`}
-                  >
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${config.bg} ${config.text}`}>
-                      {config.icon}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-gray-900" style={{ fontSize: '13px', fontWeight: 600 }}>
-                          {alert.pondName} - {alert.sensorType}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded-full border ${config.bg} ${config.text} ${config.border}`}
-                          style={{ fontSize: '10px', fontWeight: 700 }}>
-                          {config.label}
-                        </span>
-                        {!alert.isRead && <span className="w-2 h-2 bg-blue-500 rounded-full" />}
-                        {alert.isResolved && (
-                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full"
-                            style={{ fontSize: '10px', fontWeight: 600 }}>
-                            Đã xử lý
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-gray-500 mt-0.5 truncate" style={{ fontSize: '12px' }}>
-                        {alert.message}
-                      </p>
-                      <p className="text-gray-400 mt-0.5" style={{ fontSize: '11px' }}>
-                        {new Date(alert.timestamp).toLocaleString('vi-VN')}
-                      </p>
-                    </div>
-                    <ChevronRight size={16} className="text-gray-300 shrink-0 mt-1" />
-                  </div>
-                );
-              })}
-
-              {filteredAlerts.length === 0 && (
-                <div className="py-16 text-center">
-                  <BellRing size={32} className="text-gray-200 mx-auto mb-3" />
-                  <p className="text-gray-400" style={{ fontSize: '14px' }}>Không có cảnh báo nào</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Alert Detail Panel */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            {selectedAlert ? (
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-gray-900" style={{ fontSize: '14px', fontWeight: 600 }}>Chi tiết cảnh báo</h3>
-                  <button onClick={() => setSelectedAlert(null)} className="p-1 text-gray-400 hover:text-gray-600 rounded">
-                    <X size={16} />
-                  </button>
-                </div>
-
-                {/* Severity Badge */}
-                <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4 ${SEVERITY_CONFIG[selectedAlert.severity].bg} ${SEVERITY_CONFIG[selectedAlert.severity].text}`}>
-                  {SEVERITY_CONFIG[selectedAlert.severity].icon}
-                  <span style={{ fontSize: '12px', fontWeight: 700 }}>
-                    {SEVERITY_CONFIG[selectedAlert.severity].label}
-                  </span>
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-gray-400" style={{ fontSize: '11px' }}>Vị trí</p>
-                    <p className="text-gray-800" style={{ fontSize: '13px', fontWeight: 500 }}>
-                      {selectedAlert.zoneName} → {selectedAlert.pondName}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-400" style={{ fontSize: '11px' }}>Cảm biến</p>
-                    <p className="text-gray-800" style={{ fontSize: '13px', fontWeight: 500 }}>
-                      {selectedAlert.sensorType}
-                    </p>
-                  </div>
-                  {selectedAlert.value > 0 && (
-                    <div>
-                      <p className="text-gray-400" style={{ fontSize: '11px' }}>Giá trị đo được</p>
-                      <p className="text-gray-800" style={{ fontSize: '20px', fontWeight: 700 }}>
-                        {selectedAlert.value}
-                        <span className="text-gray-400 ml-1" style={{ fontSize: '13px' }}>
-                          {selectedAlert.unit}
-                        </span>
-                      </p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-gray-400" style={{ fontSize: '11px' }}>Mô tả</p>
-                    <p className="text-gray-700" style={{ fontSize: '13px', lineHeight: 1.6 }}>
-                      {selectedAlert.message}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-400" style={{ fontSize: '11px' }}>Thời gian</p>
-                    <p className="text-gray-800" style={{ fontSize: '13px' }}>
-                      {new Date(selectedAlert.timestamp).toLocaleString('vi-VN')}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                {!selectedAlert.isResolved && (
-                  <div className="mt-5 space-y-2">
-                    <button
-                      onClick={() => markAsResolved(selectedAlert.id)}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"
-                      style={{ fontWeight: 600 }}
-                    >
-                      <CheckCircle2 size={16} />
-                      Đánh dấu đã xử lý
-                    </button>
-                    <button className="w-full py-2.5 border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 transition-colors"
-                      style={{ fontSize: '13px' }}>
-                      Đến trang điều khiển
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center py-12 text-center">
-                <BellRing size={32} className="text-gray-200 mb-3" />
-                <p className="text-gray-400" style={{ fontSize: '13px' }}>
-                  Chọn một cảnh báo để xem chi tiết
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <ThresholdForm />
-      )}
+      {/* Tab content */}
+      {activeTab === 'threshold' ? <ThresholdTab zones={zones} /> : <AlertLogsTab zones={zones} />}
     </div>
   );
 };

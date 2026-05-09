@@ -41,7 +41,7 @@ export interface UserProfile {
   status:     UserStatus;
   created_at: string;
   updated_at: string;
-  zones:      { id: string; name: string }[];
+  ponds:      { id: string; name: string }[];
 }
 
 export interface ActivityLog {
@@ -63,7 +63,7 @@ export interface CreateUserDto {
   fullName?: string;
   phone?:    string;
   role?:     UserRole;
-  zoneIds?:  string[];
+  pondIds?:  string[];
 }
 
 export interface UpdateUserDto {
@@ -71,7 +71,7 @@ export interface UpdateUserDto {
   phone?:    string;
   role?:     UserRole;
   status?:   UserStatus;
-  zoneIds?:  string[];
+  pondIds?:  string[];
 }
 
 // ===== API RESPONSE WRAPPERS =====

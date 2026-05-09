@@ -1,7 +1,7 @@
 /**
  * UserFormDialog.tsx
  * Radix UI Dialog-based form to Create or Edit a user.
- * Supports full name, email, password (create only), phone, role, and multi-zone assignment.
+ * Supports full name, email, password (create only), phone, role, and multi-pond assignment.
  */
 
 import { useEffect, useReducer, useCallback } from 'react';
@@ -17,7 +17,7 @@ interface FormState {
   password:   string;
   phone:      string;
   role:       'admin' | 'user';
-  zoneIds:    string[];
+  pondIds:    string[];
   showPwd:    boolean;
   isSubmitting: boolean;
   error:      string | null;
@@ -25,7 +25,7 @@ interface FormState {
 
 type FormAction =
   | { type: 'SET_FIELD'; field: keyof FormState; value: any }
-  | { type: 'TOGGLE_ZONE'; zoneId: string }
+  | { type: 'TOGGLE_POND'; pondId: string }
   | { type: 'SUBMIT_START' }
   | { type: 'SUBMIT_END'; error?: string }
   | { type: 'RESET'; user?: UserProfile };
@@ -36,7 +36,7 @@ const initialState = (user?: UserProfile): FormState => ({
   password:     '',
   phone:        user?.phone     ?? '',
   role:         user?.role      ?? 'user',
-  zoneIds:      user?.zones.map((z) => z.id) ?? [],
+  pondIds:      user?.ponds.map((p) => p.id) ?? [],
   showPwd:      false,
   isSubmitting: false,
   error:        null,
@@ -45,12 +45,12 @@ const initialState = (user?: UserProfile): FormState => ({
 const reducer = (state: FormState, action: FormAction): FormState => {
   switch (action.type) {
     case 'SET_FIELD':    return { ...state, [action.field]: action.value };
-    case 'TOGGLE_ZONE':
+    case 'TOGGLE_POND':
       return {
         ...state,
-        zoneIds: state.zoneIds.includes(action.zoneId)
-          ? state.zoneIds.filter((id) => id !== action.zoneId)
-          : [...state.zoneIds, action.zoneId],
+        pondIds: state.pondIds.includes(action.pondId)
+          ? state.pondIds.filter((id) => id !== action.pondId)
+          : [...state.pondIds, action.pondId],
       };
     case 'SUBMIT_START': return { ...state, isSubmitting: true, error: null };
     case 'SUBMIT_END':   return { ...state, isSubmitting: false, error: action.error ?? null };
@@ -66,7 +66,7 @@ interface UserFormDialogProps {
   onClose:   () => void;
   onSubmit:  (dto: CreateUserDto | UpdateUserDto) => Promise<void>;
   editUser?: UserProfile | null;
-  zones:     Zone[];
+  ponds:     Zone[];
 }
 
 export const UserFormDialog: React.FC<UserFormDialogProps> = ({
@@ -74,7 +74,7 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({
   onClose,
   onSubmit,
   editUser,
-  zones,
+  ponds,
 }) => {
   const isEdit = !!editUser;
   const [state, dispatch] = useReducer(reducer, initialState(editUser ?? undefined));
@@ -104,7 +104,7 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({
               fullName: state.fullName || undefined,
               phone:    state.phone    || undefined,
               role:     state.role,
-              zoneIds:  state.zoneIds,
+              pondIds:  state.pondIds,
             }
           : {
               email:    state.email,
@@ -112,7 +112,7 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({
               fullName: state.fullName || undefined,
               phone:    state.phone    || undefined,
               role:     state.role,
-              zoneIds:  state.zoneIds,
+              pondIds:  state.pondIds,
             };
 
         await onSubmit(dto);
@@ -259,35 +259,35 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({
               </div>
             </div>
 
-            {/* Zone assignment (only for regular users) */}
+            {/* Pond assignment (only for regular users) */}
             {state.role === 'user' && (
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-2">
                   <MapPin size={12} className="inline mr-1" />
-                  Phân công khu vực
+                  Phân công ao nuôi
                 </label>
-                {zones.length === 0 ? (
-                  <p className="text-gray-400 text-xs">Chưa có khu vực nào trong hệ thống.</p>
+                {ponds.length === 0 ? (
+                  <p className="text-gray-400 text-xs">Chưa có ao nuôi nào trong hệ thống.</p>
                 ) : (
                   <div className="grid grid-cols-1 gap-2">
-                    {zones.map((zone) => {
-                      const checked = state.zoneIds.includes(zone.id);
+                    {ponds.map((pond) => {
+                      const checked = state.pondIds.includes(pond.id);
                       return (
                         <button
-                          key={zone.id}
+                          key={pond.id}
                           type="button"
-                          id={`zone-${zone.id}`}
-                          onClick={() => dispatch({ type: 'TOGGLE_ZONE', zoneId: zone.id })}
+                          id={`pond-${pond.id}`}
+                          onClick={() => dispatch({ type: 'TOGGLE_POND', pondId: pond.id })}
                           className={`flex items-center justify-between px-3 py-2.5 rounded-xl border-2 text-sm transition-all text-left ${
                             checked
                               ? 'border-teal-400 bg-teal-50 text-teal-800'
                               : 'border-gray-200 text-gray-600 hover:border-gray-300'
                           }`}
                         >
-                          <span className="font-medium">{zone.name}</span>
+                          <span className="font-medium">{pond.name}</span>
                           <div className="flex items-center gap-2">
-                            {zone.location && (
-                              <span className="text-xs text-gray-400">{zone.location}</span>
+                            {pond.location && (
+                              <span className="text-xs text-gray-400">{pond.location}</span>
                             )}
                             <div
                               className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
