@@ -3,7 +3,7 @@
  * Central HTTP client for all backend API calls.
  *
  * Automatically attaches the Authorization: Bearer <token> header
- * from the session stored in sessionStorage after login.
+ * from localStorage (stored by authService.login during authentication).
  *
  * Usage:
  *   import { api } from './api';
@@ -13,13 +13,10 @@
 
 const API_BASE = 'http://localhost:5000';
 
-/** Reads the JWT from the session stored by AuthContext */
+/** Reads the JWT from localStorage (stored by authService.login) */
 const getToken = (): string | null => {
   try {
-    const raw = sessionStorage.getItem('aquasmart_session');
-    if (!raw) return null;
-    const session = JSON.parse(raw) as { token?: string };
-    return session.token ?? null;
+    return localStorage.getItem('accessToken');
   } catch {
     return null;
   }
