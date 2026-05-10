@@ -4,7 +4,7 @@
  * All DB operations use supabaseAdmin to bypass RLS.
  */
 
-import { supabaseAdmin as supabase } from '../lib/supabase.client.ts';
+import { supabaseAdmin as supabase } from "../lib/supabase.client.ts";
 
 // ===== TYPES =====
 
@@ -12,20 +12,20 @@ export interface Zone {
   id: string;
   name: string;
   location: string | null;
-  status: 'active' | 'inactive' | 'maintenance';
+  status: "active" | "inactive" | "maintenance";
   created_at: string;
 }
 
 export interface CreateZoneDto {
   name: string;
   location?: string;
-  status?: 'active' | 'inactive' | 'maintenance';
+  status?: "active" | "inactive" | "maintenance";
 }
 
 export interface UpdateZoneDto {
   name?: string;
   location?: string;
-  status?: 'active' | 'inactive' | 'maintenance';
+  status?: "active" | "inactive" | "maintenance";
 }
 
 // ===== FUNCTIONS =====
@@ -33,7 +33,7 @@ export interface UpdateZoneDto {
 export const listZones = async (userId: string): Promise<Zone[]> => {
   // Thực hiện join bảng zones với user_zones để lọc theo userId
   const { data, error } = await supabase
-    .from('user_zones')
+    .from("user_zones")
     .select(
       `
       zones (
@@ -41,7 +41,7 @@ export const listZones = async (userId: string): Promise<Zone[]> => {
       )
     `,
     )
-    .eq('user_id', userId);
+    .eq("user_id", userId);
 
   if (error) throw new Error(error.message);
 
@@ -51,22 +51,41 @@ export const listZones = async (userId: string): Promise<Zone[]> => {
 
 export const getZoneById = async (id: string): Promise<Zone> => {
   const { data, error } = await supabase
-    .from('zones')
-    .select('*')
-    .eq('id', id)
+    .from("zones")
+    .select("*")
+    .eq("id", id)
     .single();
 
   if (error) throw new Error(error.message);
   return data as Zone;
 };
 
+export const getZoneByIdForUser = async (
+  id: string,
+  userId: string,
+  role?: string,
+): Promise<Zone> => {
+  if (!userId || role === "admin") {
+    return getZoneById(id);
+  }
+
+  const zones = await listZones(userId);
+  const zone = zones.find((item) => item.id === id);
+
+  if (!zone) {
+    throw new Error("Bạn không có quyền truy cập zone này.");
+  }
+
+  return zone;
+};
+
 export const createZone = async (dto: CreateZoneDto): Promise<Zone> => {
   const { data, error } = await supabase
-    .from('zones')
+    .from("zones")
     .insert({
       name: dto.name,
       location: dto.location ?? null,
-      status: dto.status ?? 'active',
+      status: dto.status ?? "active",
     })
     .select()
     .single();
@@ -80,9 +99,9 @@ export const updateZone = async (
   dto: UpdateZoneDto,
 ): Promise<Zone> => {
   const { data, error } = await supabase
-    .from('zones')
+    .from("zones")
     .update(dto)
-    .eq('id', id)
+    .eq("id", id)
     .select()
     .single();
 
@@ -91,6 +110,6 @@ export const updateZone = async (
 };
 
 export const deleteZone = async (id: string): Promise<void> => {
-  const { error } = await supabase.from('zones').delete().eq('id', id);
+  const { error } = await supabase.from("zones").delete().eq("id", id);
   if (error) throw new Error(error.message);
 };

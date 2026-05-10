@@ -10,6 +10,7 @@
  *   /admin/ponds            → Quản lý ao nuôi (Admin only)
  *   /admin/devices          → Quản lý thiết bị (Admin only)
  *   /admin/users            → Quản lý tài khoản (Admin only)
+ *   /devices                → Quản lý thiết bị của user (theo zone được gán)
  *   /monitoring             → Giám sát Real-time
  *   /control                → UC13: Điều khiển thiết bị
  *   /device-logs            → Nhật ký điều khiển thiết bị
@@ -102,6 +103,9 @@ export const router = createBrowserRouter([
 
           // Dashboard
           { path: "dashboard", element: <Dashboard /> },
+
+          // Thiết bị của user (lọc theo zone gán trong backend)
+          { path: "devices", element: <DevicesPage /> },
 
           // ===== Admin Only Routes =====
           {

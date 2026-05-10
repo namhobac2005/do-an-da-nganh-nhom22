@@ -1,6 +1,6 @@
-import { Response } from 'express';
-import { AuthRequest } from '../middleware/auth.middleware';
-import * as zoneService from '../services/zone.service';
+import { Response } from "express";
+import { AuthRequest } from "../middleware/auth.middleware";
+import * as zoneService from "../services/zone.service";
 
 /**
  * Lấy danh sách vùng nuôi theo quyền hạn của User
@@ -14,7 +14,7 @@ export const getAllZones = async (req: AuthRequest, res: Response) => {
     if (!userId) {
       return res.status(401).json({
         success: false,
-        message: 'Không xác định được danh tính người dùng.',
+        message: "Không xác định được danh tính người dùng.",
       });
     }
 
@@ -26,10 +26,10 @@ export const getAllZones = async (req: AuthRequest, res: Response) => {
       data: zones,
     });
   } catch (error: any) {
-    console.error('Error in getAllZones:', error.message);
+    console.error("Error in getAllZones:", error.message);
     return res.status(500).json({
       success: false,
-      message: 'Lỗi hệ thống khi lấy danh sách vùng nuôi.',
+      message: "Lỗi hệ thống khi lấy danh sách vùng nuôi.",
     });
   }
 };
@@ -41,7 +41,17 @@ export const getAllZones = async (req: AuthRequest, res: Response) => {
 export const getZoneById = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const zone = await zoneService.getZoneById(id);
+    const userId = req.user?.id;
+    const role = req.user?.role;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Không xác định được danh tính người dùng.",
+      });
+    }
+
+    const zone = await zoneService.getZoneByIdForUser(id, userId, role);
 
     return res.status(200).json({
       success: true,
@@ -50,7 +60,7 @@ export const getZoneById = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     return res.status(404).json({
       success: false,
-      message: 'Không tìm thấy vùng nuôi yêu cầu.',
+      message: "Không tìm thấy vùng nuôi yêu cầu.",
     });
   }
 };
@@ -73,13 +83,13 @@ export const createZone = async (req: AuthRequest, res: Response) => {
 
     return res.status(201).json({
       success: true,
-      message: 'Tạo vùng nuôi thành công.',
+      message: "Tạo vùng nuôi thành công.",
       data: newZone,
     });
   } catch (error: any) {
     return res.status(400).json({
       success: false,
-      message: error.message || 'Dữ liệu không hợp lệ.',
+      message: error.message || "Dữ liệu không hợp lệ.",
     });
   }
 };
@@ -95,13 +105,13 @@ export const updateZone = async (req: AuthRequest, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Cập nhật vùng nuôi thành công.',
+      message: "Cập nhật vùng nuôi thành công.",
       data: updatedZone,
     });
   } catch (error: any) {
     return res.status(400).json({
       success: false,
-      message: error.message || 'Cập nhật thất bại.',
+      message: error.message || "Cập nhật thất bại.",
     });
   }
 };
@@ -117,12 +127,12 @@ export const deleteZone = async (req: AuthRequest, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Đã xóa vùng nuôi.',
+      message: "Đã xóa vùng nuôi.",
     });
   } catch (error: any) {
     return res.status(500).json({
       success: false,
-      message: 'Không thể xóa vùng nuôi.',
+      message: "Không thể xóa vùng nuôi.",
     });
   }
 };

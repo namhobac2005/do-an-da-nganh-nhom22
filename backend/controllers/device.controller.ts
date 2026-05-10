@@ -10,9 +10,11 @@ interface CustomRequest extends Request {
 }
 
 // Lấy danh sách thiết bị
-export const getDevices = async (req: Request, res: Response) => {
+export const getDevices = async (req: CustomRequest, res: Response) => {
   try {
-    const devices = await deviceService.getAllDevices();
+    const userId = req.user?.id ? String(req.user.id) : undefined;
+    const role = req.user?.role;
+    const devices = await deviceService.getAllDevicesForUser(userId, role);
     res.status(200).json(devices);
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -30,9 +32,15 @@ export const controlDevice = async (req: CustomRequest, res: Response) => {
 
     // Lấy ID user từ req.user (Do Middleware Auth gắn vào)
     const userId = req.user?.id ? String(req.user.id) : undefined;
+    const role = req.user?.role;
 
     // Gọi xuống tầng Service
-    const result = await deviceService.controlDevice(deviceId, level, userId);
+    const result = await deviceService.controlDevice(
+      deviceId,
+      level,
+      userId,
+      role,
+    );
 
     res.status(200).json(result);
   } catch (error: any) {
@@ -40,7 +48,7 @@ export const controlDevice = async (req: CustomRequest, res: Response) => {
   }
 };
 
-export const getDeviceLogs = async (req: Request, res: Response) => {
+export const getDeviceLogs = async (req: CustomRequest, res: Response) => {
   try {
     const limit = req.query.limit
       ? parseInt(req.query.limit as string, 10)
@@ -48,7 +56,16 @@ export const getDeviceLogs = async (req: Request, res: Response) => {
     const actuatorId = req.query.actuatorId as string | undefined;
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
-    const logs = await deviceService.getDeviceLogs(limit, actuatorId, from, to);
+    const userId = req.user?.id ? String(req.user.id) : undefined;
+    const role = req.user?.role;
+    const logs = await deviceService.getDeviceLogs(
+      limit,
+      actuatorId,
+      from,
+      to,
+      userId,
+      role,
+    );
     res.status(200).json(logs);
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -56,9 +73,11 @@ export const getDeviceLogs = async (req: Request, res: Response) => {
 };
 
 // Tạo thiết bị mới
-export const createDevice = async (req: Request, res: Response) => {
+export const createDevice = async (req: CustomRequest, res: Response) => {
   try {
     const { name, type, feed_key, pond_id, mode, description } = req.body;
+    const userId = req.user?.id ? String(req.user.id) : undefined;
+    const role = req.user?.role;
 
     // Kiểm tra dữ liệu bắt buộc
     if (!name || !type) {
@@ -77,14 +96,18 @@ export const createDevice = async (req: Request, res: Response) => {
       });
     }
 
-    const device = await deviceService.createDevice({
-      name,
-      type,
-      feed_key: feed_key || undefined,
-      pond_id,
-      mode: mode || "manual",
-      description,
-    });
+    const device = await deviceService.createDevice(
+      {
+        name,
+        type,
+        feed_key: feed_key || undefined,
+        pond_id,
+        mode: mode || "manual",
+        description,
+      },
+      userId,
+      role,
+    );
 
     res.status(201).json({
       success: true,
@@ -97,10 +120,12 @@ export const createDevice = async (req: Request, res: Response) => {
 };
 
 // Cập nhật thiết bị
-export const updateDevice = async (req: Request, res: Response) => {
+export const updateDevice = async (req: CustomRequest, res: Response) => {
   try {
     const deviceId = req.params.id as string;
     const { name, type, feed_key, pond_id, mode, description } = req.body;
+    const userId = req.user?.id ? String(req.user.id) : undefined;
+    const role = req.user?.role;
 
     // Kiểm tra loại thiết bị nếu được cung cấp
     if (type) {
@@ -113,14 +138,19 @@ export const updateDevice = async (req: Request, res: Response) => {
       }
     }
 
-    const device = await deviceService.updateDevice(deviceId, {
-      name,
-      type,
-      feed_key,
-      pond_id,
-      mode,
-      description,
-    });
+    const device = await deviceService.updateDevice(
+      deviceId,
+      {
+        name,
+        type,
+        feed_key,
+        pond_id,
+        mode,
+        description,
+      },
+      userId,
+      role,
+    );
 
     res.status(200).json({
       success: true,
@@ -133,10 +163,13 @@ export const updateDevice = async (req: Request, res: Response) => {
 };
 
 // Xóa thiết bị
-export const deleteDevice = async (req: Request, res: Response) => {
+export const deleteDevice = async (req: CustomRequest, res: Response) => {
   try {
     const deviceId = req.params.id as string;
-    const result = await deviceService.deleteDevice(deviceId);
+    const userId = req.user?.id ? String(req.user.id) : undefined;
+    const role = req.user?.role;
+
+    const result = await deviceService.deleteDevice(deviceId, userId, role);
     res.status(200).json({
       success: true,
       message: result.message,
@@ -147,10 +180,14 @@ export const deleteDevice = async (req: Request, res: Response) => {
 };
 
 // Lấy thiết bị theo ID
-export const getDevice = async (req: Request, res: Response) => {
+export const getDevice = async (req: CustomRequest, res: Response) => {
   try {
     const deviceId = req.params.id as string;
-    const device = await deviceService.getDeviceById(deviceId);
+    const userId = req.user?.id ? String(req.user.id) : undefined;
+    const role = req.user?.role;
+
+    const device = await deviceService.getDeviceById(deviceId, userId, role);
+
     res.status(200).json(device);
   } catch (error: any) {
     res.status(404).json({ success: false, message: error.message });
