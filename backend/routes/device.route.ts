@@ -1,19 +1,22 @@
 import { Router } from "express";
 import * as deviceController from "../controllers/device.controller.ts"; // Giữ đuôi .js nếu Node.js đang chạy ở mode ES Modules
+import { verifyToken } from "../middleware/auth.middleware";
 
 const router = Router();
+
+router.use(verifyToken());
 
 // Lấy danh sách thiết bị
 // API: GET http://localhost:5000/api/devices
 router.get("/", deviceController.getDevices);
 
-// Lấy thiết bị theo ID
-// API: GET http://localhost:5000/api/devices/:id
-router.get("/:id", deviceController.getDevice);
-
 // Lấy nhật ký điều khiển thiết bị
 // API: GET http://localhost:5000/api/devices/logs
 router.get("/logs", deviceController.getDeviceLogs);
+
+// Lấy thiết bị theo ID
+// API: GET http://localhost:5000/api/devices/:id
+router.get("/:id", deviceController.getDevice);
 
 // Xử lý lệnh điều khiển thiết bị
 // API: POST http://localhost:5000/api/devices/:id/control

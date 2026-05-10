@@ -55,6 +55,7 @@ export const DevicesPage: React.FC = () => {
         type: dev.type as any,
         feed_key: dev.feed_key,
         pond_id: dev.pond_id,
+        zone_id: dev.zone_id ?? null,
         status: dev.status || "OFF",
         mode: dev.mode || "manual",
         description: dev.description,

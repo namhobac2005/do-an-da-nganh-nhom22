@@ -3,7 +3,7 @@
  * Giao tiếp với Backend Node.js/Express
  */
 
-const API_URL = "http://localhost:5000";
+import { api } from "./api";
 
 export interface SendCommandResult {
   success: boolean;
@@ -42,10 +42,7 @@ export interface DeviceSchedule {
 
 export const getAllDevices = async () => {
   try {
-    const response = await fetch(`${API_URL}/devices`);
-    if (!response.ok) throw new Error("Network response was not ok");
-
-    const dbDevices = await response.json();
+    const dbDevices = await api.get<any[]>("/devices");
 
     return dbDevices.map((dbDev: any) => {
       // Xác định level: Nếu là số thì giữ nguyên, nếu là chữ ON/OFF thì map về 1/0
@@ -67,6 +64,7 @@ export const getAllDevices = async () => {
         lastUpdated: dbDev.updated_at || new Date().toISOString(),
         // Nếu DB có liên kết zone/ao, giữ nguyên trường để frontend có thể lọc theo ao
         pond_id: dbDev.pond_id || null,
+        zone_id: dbDev.zone_id || null,
       };
     });
   } catch (error) {
@@ -88,19 +86,7 @@ export const sendDeviceCommand = async (
     const numericLevel =
       typeof level === "string" ? parseInt(level, 10) : level;
 
-    const response = await fetch(`${API_URL}/devices/${deviceId}/control`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ level: numericLevel }),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      throw new Error(result.message || "Lỗi từ Backend");
-    }
+    await api.post(`/devices/${deviceId}/control`, { level: numericLevel });
 
     return {
       success: true,
@@ -128,16 +114,9 @@ export const getDeviceLogs = async (
     if (from) query.set("from", from);
     if (to) query.set("to", to);
 
-    const response = await fetch(`${API_URL}/devices/logs?${query.toString()}`);
-    if (!response.ok) {
-      console.error(
-        "[FE] Response not ok:",
-        response.status,
-        response.statusText,
-      );
-      throw new Error("Không lấy được logs thiết bị");
-    }
-    const data = await response.json();
+    const data = await api.get<DeviceLog[]>(
+      `/devices/logs?${query.toString()}`,
+    );
     console.log("[FE] Device logs fetched:", data);
     return data;
   } catch (error) {
@@ -153,12 +132,9 @@ export const getDeviceSchedules = async (
     const query = new URLSearchParams();
     if (actuatorId) query.set("actuatorId", actuatorId);
 
-    const response = await fetch(
-      `${API_URL}/schedules${query.toString() ? `?${query.toString()}` : ""}`,
+    return await api.get<DeviceSchedule[]>(
+      `/schedules${query.toString() ? `?${query.toString()}` : ""}`,
     );
-
-    if (!response.ok) throw new Error("Không lấy được lịch điều khiển");
-    return await response.json();
   } catch (error) {
     console.error("[FE] Lỗi lấy lịch điều khiển:", error);
     return [];
@@ -172,18 +148,7 @@ export const createDeviceSchedule = async (payload: {
   note?: string;
 }): Promise<{ success: boolean; error?: string }> => {
   try {
-    const response = await fetch(`${API_URL}/schedules`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const result = await response.json();
-      throw new Error(result.message || "Tạo lịch thất bại");
-    }
+    await api.post("/schedules", payload);
 
     return { success: true };
   } catch (error: any) {
@@ -196,14 +161,7 @@ export const cancelDeviceSchedule = async (
   scheduleId: string,
 ): Promise<{ success: boolean; error?: string }> => {
   try {
-    const response = await fetch(`${API_URL}/schedules/${scheduleId}/cancel`, {
-      method: "PATCH",
-    });
-
-    if (!response.ok) {
-      const result = await response.json();
-      throw new Error(result.message || "Hủy lịch thất bại");
-    }
+    await api.patch(`/schedules/${scheduleId}/cancel`);
 
     return { success: true };
   } catch (error: any) {
@@ -220,6 +178,7 @@ export interface Device {
   type: "pump" | "fan" | "light" | "servo";
   feed_key: string;
   pond_id?: string;
+  zone_id?: string | null;
   status: string;
   mode: "auto" | "manual";
   description?: string;
@@ -252,19 +211,10 @@ export const createDevice = async (
   deviceData: CreateDeviceDto,
 ): Promise<{ success: boolean; data?: Device; error?: string }> => {
   try {
-    const response = await fetch(`${API_URL}/devices`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(deviceData),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      throw new Error(result.message || "Tạo thiết bị thất bại");
-    }
+    const result = await api.post<{ success: boolean; data: Device }>(
+      "/devices",
+      deviceData,
+    );
 
     return { success: true, data: result.data };
   } catch (error: any) {
@@ -281,19 +231,10 @@ export const updateDevice = async (
   deviceData: UpdateDeviceDto,
 ): Promise<{ success: boolean; data?: Device; error?: string }> => {
   try {
-    const response = await fetch(`${API_URL}/devices/${deviceId}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(deviceData),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      throw new Error(result.message || "Cập nhật thiết bị thất bại");
-    }
+    const result = await api.put<{ success: boolean; data: Device }>(
+      `/devices/${deviceId}`,
+      deviceData,
+    );
 
     return { success: true, data: result.data };
   } catch (error: any) {
@@ -309,15 +250,7 @@ export const deleteDevice = async (
   deviceId: string,
 ): Promise<{ success: boolean; error?: string }> => {
   try {
-    const response = await fetch(`${API_URL}/devices/${deviceId}`, {
-      method: "DELETE",
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      throw new Error(result.message || "Xóa thiết bị thất bại");
-    }
+    await api.delete(`/devices/${deviceId}`);
 
     return { success: true };
   } catch (error: any) {
@@ -331,9 +264,7 @@ export const deleteDevice = async (
  */
 export const getDevice = async (deviceId: string): Promise<Device | null> => {
   try {
-    const response = await fetch(`${API_URL}/devices/${deviceId}`);
-    if (!response.ok) throw new Error("Không lấy được chi tiết thiết bị");
-    return await response.json();
+    return await api.get<Device>(`/devices/${deviceId}`);
   } catch (error) {
     console.error("[FE] Lỗi lấy chi tiết thiết bị:", error);
     return null;
