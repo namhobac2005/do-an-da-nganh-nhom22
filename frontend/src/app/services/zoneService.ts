@@ -1,39 +1,30 @@
-import { api } from "./api";
-import type { Zone } from "../types/user.types";
+/**
+ * zoneService.ts
+ * All API calls for Zone (Pond) management.
+ * Uses the central api client which automatically attaches Bearer token.
+ */
 
-export const getZones = async () => {
-  const response = await api.get<{ success: boolean; data: Zone[] }>("/zones");
-  return response.data;
-};
+import { api } from './api';
+import type { Zone, CreateZoneDto, UpdateZoneDto, ApiListResponse, ApiItemResponse } from '../types/user.types';
 
-export const createZone = async (data: any) => {
-  const response = await api.post<{ success: boolean; data: Zone }>(
-    "/zones",
-    data,
-  );
-  return response.data;
-};
+export const getZones = (): Promise<Zone[]> =>
+  api.get<ApiListResponse<Zone>>('/zones').then((r) => r.data);
 
-export const updateZone = async (id: string, data: any) => {
-  const response = await api.put<{ success: boolean; data: Zone }>(
-    `/zones/${id}`,
-    data,
-  );
-  return response.data;
-};
+export const getZoneById = (id: string): Promise<Zone> =>
+  api.get<ApiItemResponse<Zone>>(`/zones/${id}`).then((r) => r.data);
 
-export const deleteZone = async (id: string) => {
-  await api.delete(`/zones/${id}`);
-};
+export const createZone = (dto: CreateZoneDto): Promise<Zone> =>
+  api.post<ApiItemResponse<Zone>>('/zones', dto).then((r) => r.data);
 
-export const getZoneById = async (id: string): Promise<Zone> => {
-  try {
-    const response = await api.get<{ success: boolean; data: Zone }>(
-      `/zones/${id}`,
-    );
-    return response.data;
-  } catch (error: any) {
-    console.error(`Lỗi khi lấy Zone ID ${id}:`, error);
-    throw error;
-  }
-};
+export const updateZone = (id: string, dto: UpdateZoneDto): Promise<Zone> =>
+  api.put<ApiItemResponse<Zone>>(`/zones/${id}`, dto).then((r) => r.data);
+
+export const deleteZone = (id: string): Promise<void> =>
+  api.delete<{ success: boolean }>(`/zones/${id}`).then(() => undefined);
+
+/**
+ * Fetches distinct farming_type values from the ponds table.
+ * Used to populate the Creatable Combobox for "Loại nuôi".
+ */
+export const getFarmingTypes = (): Promise<string[]> =>
+  api.get<{ success: boolean; data: string[] }>('/zones/farming-types').then((r) => r.data);

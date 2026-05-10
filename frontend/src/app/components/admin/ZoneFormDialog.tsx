@@ -1,6 +1,6 @@
 /**
  * ZoneFormDialog.tsx
- * Radix UI Dialog for creating/editing a zone (UC01).
+ * Radix UI Dialog for creating/editing a zone/pond (UC01).
  * Features:
  *  - React-Hook-Form validation with red error messages
  *  - Creatable combobox for farming_type (select existing OR type new)
@@ -17,14 +17,17 @@ import type { Zone, CreateZoneDto, UpdateZoneDto } from '../../types/user.types'
 type FormValues = {
   name:         string;
   location:     string;
+  farming_type: string;
   status:       'active' | 'inactive' | 'maintenance';
 };
 
 interface ZoneFormDialogProps {
-  open:          boolean;
-  onClose:       () => void;
-  onSubmit:      (dto: CreateZoneDto | UpdateZoneDto) => Promise<void>;
-  editZone?:     Zone | null;}
+  open:           boolean;
+  onClose:        () => void;
+  onSubmit:       (dto: CreateZoneDto | UpdateZoneDto) => Promise<void>;
+  editZone?:      Zone | null;
+  farmingTypes?:  string[];
+}
 
 // ===== CREATABLE COMBOBOX =====
 
@@ -126,7 +129,7 @@ const STATUS_OPTIONS = [
 ] as const;
 
 export const ZoneFormDialog: React.FC<ZoneFormDialogProps> = ({
-  open, onClose, onSubmit, editZone,
+  open, onClose, onSubmit, editZone, farmingTypes = [],
 }) => {
   const isEdit = !!editZone;
 
@@ -141,15 +144,19 @@ export const ZoneFormDialog: React.FC<ZoneFormDialogProps> = ({
     defaultValues: {
       name:         '',
       location:     '',
+      farming_type: '',
       status:       'active',
     },
   });
+
+  const farmingTypeValue = watch('farming_type');
 
   // Reset form when dialog opens/closes or editZone changes
   useEffect(() => {
     reset({
       name:         editZone?.name         ?? '',
       location:     editZone?.location     ?? '',
+      farming_type: editZone?.farming_type ?? '',
       status:       editZone?.status       ?? 'active',
     });
   }, [open, editZone, reset]);
@@ -159,10 +166,15 @@ export const ZoneFormDialog: React.FC<ZoneFormDialogProps> = ({
     const dto = {
       name:         values.name.trim(),
       location:     values.location.trim()     || undefined,
+      farming_type: values.farming_type.trim() || undefined,
       status:       values.status,
     };
-    await onSubmit(dto);
-    onClose();
+    try {
+      await onSubmit(dto);
+      onClose();
+    } catch {
+      // Error toast is handled by the parent (ZonesPage). Dialog stays open.
+    }
   };
 
   return (
@@ -228,6 +240,22 @@ export const ZoneFormDialog: React.FC<ZoneFormDialogProps> = ({
               />
             </div>
 
+            {/* Farming Type — Creatable Combobox */}
+            <div>
+              <label htmlFor="zone-farming-type" className="block text-xs font-medium text-gray-600 mb-1.5">
+                Loại nuôi
+              </label>
+              <CreatableCombobox
+                id="zone-farming-type"
+                value={farmingTypeValue}
+                onChange={(v) => setValue('farming_type', v)}
+                options={farmingTypes}
+                placeholder="VD: Tôm thẻ chân trắng"
+              />
+              <p className="text-gray-400 text-xs mt-1">
+                Chọn từ danh sách hoặc nhập loại nuôi mới
+              </p>
+            </div>
 
             {/* Status */}
             <div>

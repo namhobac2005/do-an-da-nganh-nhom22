@@ -88,7 +88,7 @@ export const UserTable: React.FC<UserTableProps> = ({
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50/60 border-b border-gray-100">
-              {['Tài khoản', 'Vai trò', 'Khu vực phụ trách', 'Trạng thái', 'Thao tác'].map((col) => (
+              {['Tài khoản', 'Vai trò', 'Ao nuôi phụ trách', 'Trạng thái', 'Thao tác'].map((col) => (
                 <th
                   key={col}
                   className="px-5 py-3.5 text-left text-gray-500 text-xs font-semibold uppercase tracking-wide"
@@ -153,16 +153,16 @@ export const UserTable: React.FC<UserTableProps> = ({
                     </span>
                   </td>
 
-                  {/* Zones */}
+                  {/* Ponds */}
                   <td className="px-5 py-4">
-                    {user.zones.length > 0 ? (
+                    {user.ponds.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
-                        {user.zones.map((z) => (
+                        {user.ponds.map((p) => (
                           <span
-                            key={z.id}
+                            key={p.id}
                             className="px-2 py-0.5 bg-teal-50 text-teal-700 rounded-md text-xs font-medium"
                           >
-                            {z.name.split(' - ')[0]}
+                            {p.name.split(' - ')[0]}
                           </span>
                         ))}
                       </div>

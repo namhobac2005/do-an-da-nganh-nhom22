@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import { Plus, Search, RefreshCw, Waves } from 'lucide-react';
 
 import { ZoneTable } from '../../components/admin/ZoneTable';
@@ -17,25 +18,30 @@ import type {
 } from '../../types/user.types';
 
 export const ZonesPage: React.FC = () => {
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editZone, setEditZone] = useState<Zone | null>(null);
+  const [zones,         setZones]         = useState<Zone[]>([]);
+  const [farmingTypes,  setFarmingTypes]  = useState<string[]>([]);
+  const [isLoading,     setIsLoading]     = useState(true);
+  const [error,         setError]         = useState<string | null>(null);
+  const [searchQuery,   setSearchQuery]   = useState('');
+  const [dialogOpen,    setDialogOpen]    = useState(false);
+  const [editZone,      setEditZone]      = useState<Zone | null>(null);
 
   // ===== FETCH =====
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const zonesData = await zoneService.getZones(); // Chỉ lấy zones
+      const zonesData = await zoneService.getZones();
       setZones(zonesData);
     } catch (err: any) {
       setError(err.message ?? 'Không thể tải dữ liệu.');
     } finally {
       setIsLoading(false);
     }
+    // Fetch farming types independently — don't block zones grid on failure
+    zoneService.getFarmingTypes()
+      .then(setFarmingTypes)
+      .catch(() => setFarmingTypes([]));
   }, []);
 
   useEffect(() => {
@@ -46,7 +52,8 @@ export const ZonesPage: React.FC = () => {
   const filtered = zones.filter(
     (z) =>
       z.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (z.location ?? '').toLowerCase().includes(searchQuery.toLowerCase()),
+      (z.location ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (z.farming_type ?? '').toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   // ===== HANDLERS =====
@@ -64,15 +71,24 @@ export const ZonesPage: React.FC = () => {
   };
 
   const handleSubmit = async (dto: CreateZoneDto | UpdateZoneDto) => {
-    if (editZone) {
-      const updated = await zoneService.updateZone(
-        editZone.id,
-        dto as UpdateZoneDto,
-      );
-      setZones((prev) => prev.map((z) => (z.id === updated.id ? updated : z)));
-    } else {
-      const created = await zoneService.createZone(dto as CreateZoneDto);
-      setZones((prev) => [created, ...prev]);
+    try {
+      if (editZone) {
+        const updated = await zoneService.updateZone(
+          editZone.id,
+          dto as UpdateZoneDto,
+        );
+        setZones((prev) => prev.map((z) => (z.id === updated.id ? updated : z)));
+        toast.success('Cập nhật vùng ao thành công.');
+      } else {
+        const created = await zoneService.createZone(dto as CreateZoneDto);
+        setZones((prev) => [created, ...prev]);
+        toast.success('Thêm vùng ao thành công.');
+      }
+      // Refresh farming types in case a new one was added
+      zoneService.getFarmingTypes().then(setFarmingTypes).catch(() => null);
+    } catch (err: any) {
+      toast.error(err.message || 'Thao tác thất bại. Vui lòng thử lại.');
+      throw err; // Re-throw so the dialog knows not to close
     }
   };
 
@@ -86,8 +102,9 @@ export const ZonesPage: React.FC = () => {
     try {
       await zoneService.deleteZone(zone.id);
       setZones((prev) => prev.filter((z) => z.id !== zone.id));
+      toast.success(`Đã xóa vùng ao "${zone.name}".`);
     } catch (err: any) {
-      alert(`Lỗi: ${err.message}`);
+      toast.error(err.message || 'Không thể xóa vùng ao.');
     }
   };
 
@@ -163,6 +180,7 @@ export const ZonesPage: React.FC = () => {
         onClose={handleClose}
         onSubmit={handleSubmit}
         editZone={editZone}
+        farmingTypes={farmingTypes}
       />
     </div>
   );

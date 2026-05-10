@@ -33,7 +33,7 @@ const StatCard: React.FC<{
 // ===== PAGE =====
 export const UsersPage: React.FC = () => {
   const [users,       setUsers]       = useState<UserProfile[]>([]);
-  const [zones,       setZones]       = useState<Zone[]>([]);
+  const [ponds,       setPonds]       = useState<Zone[]>([]);
   const [isLoading,   setIsLoading]   = useState(true);
   const [error,       setError]       = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,12 +46,12 @@ export const UsersPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [usersData, zonesData] = await Promise.all([
+      const [usersData, pondsData] = await Promise.all([
         userService.getUsers(),
         zoneService.getZones(),
       ]);
       setUsers(usersData);
-      setZones(zonesData);
+      setPonds(pondsData);
     } catch (err: any) {
       setError(err.message ?? 'Không thể tải dữ liệu. Vui lòng thử lại.');
     } finally {
@@ -174,7 +174,7 @@ export const UsersPage: React.FC = () => {
         onClose={handleClose}
         onSubmit={handleSubmit}
         editUser={editUser}
-        zones={zones}
+        ponds={ponds}
       />
     </div>
   );
