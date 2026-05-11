@@ -1,12 +1,7 @@
 /**
  * ZoneDetailPage.tsx
  * Trang chi tiết vùng ao (UC01 — Master-Detail).
- *
- * This page is the LAYOUT SHELL for a specific zone.
- * Fetch basic zone info and render placeholder sections for other teams:
- *   - Sensor Data      → Sensor module team
- *   - Device Control   → Actuator module team
- *   - Alerts           → Alert module team
+ * Kết nối dữ liệu thực từ Backend (stats: ponds, sensors, actuators, alerts).
  */
 
 import { useState, useEffect } from 'react';
@@ -23,12 +18,14 @@ import {
   LayoutGrid,
   AlertCircle,
   Loader2,
+  ArrowUpRight,
+  Users,
 } from 'lucide-react';
 import * as zoneService from '../../services/zoneService';
 import type { Zone } from '../../types/user.types';
 
 // ===== STATUS CONFIG =====
-const STATUS_CONFIG = {
+const STATUS_CONFIG: Record<string, any> = {
   active: {
     label: 'Hoạt động',
     bg: 'bg-emerald-100',
@@ -91,7 +88,8 @@ export const ZoneDetailPage: React.FC = () => {
   const { zoneId } = useParams<{ zoneId: string }>();
   const navigate = useNavigate();
 
-  const [zone, setZone] = useState<Zone | null>(null);
+  // zone state bây giờ sẽ chứa thêm thuộc tính stats từ Backend
+  const [zone, setZone] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -100,6 +98,7 @@ export const ZoneDetailPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
+      // Gọi service lấy chi tiết zone kèm theo stats thực tế
       const data = await zoneService.getZoneById(zoneId);
       setZone(data);
     } catch (err: any) {
@@ -151,7 +150,39 @@ export const ZoneDetailPage: React.FC = () => {
     );
   }
 
-  const cfg = STATUS_CONFIG[zone.status];
+  const cfg = STATUS_CONFIG[zone.status] || STATUS_CONFIG.active;
+
+  // Cấu hình dữ liệu thống kê từ stats trả về của Backend
+  const statsSummary = [
+    {
+      label: 'Ao nuôi',
+      value: zone.stats?.totalPonds ?? 0,
+      icon: <LayoutGrid size={18} />,
+      bg: 'bg-blue-50',
+      text: 'text-blue-700',
+    },
+    {
+      label: 'Thiết bị',
+      value: zone.stats?.totalActuators ?? 0,
+      icon: <Cpu size={18} />,
+      bg: 'bg-purple-50',
+      text: 'text-purple-700',
+    },
+    {
+      label: 'Cảm biến',
+      value: zone.stats?.totalSensors ?? 0,
+      icon: <Activity size={18} />,
+      bg: 'bg-teal-50',
+      text: 'text-teal-700',
+    },
+    {
+      label: 'Người quản lý',
+      value: zone.stats?.managers?.length ?? 0,
+      icon: <Users size={18} />,
+      bg: 'bg-orange-50',
+      text: 'text-orange-700',
+    },
+  ];
 
   return (
     <div className="space-y-5">
@@ -170,7 +201,6 @@ export const ZoneDetailPage: React.FC = () => {
       {/* Zone Header Card */}
       <div className="bg-gradient-to-br from-teal-800 to-emerald-700 rounded-2xl overflow-hidden shadow-sm">
         <div className="px-6 py-5 flex flex-col sm:flex-row sm:items-center gap-4">
-          {/* Icon + Info */}
           <div className="flex items-center gap-4 flex-1 min-w-0">
             <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center shrink-0">
               <Waves size={28} className="text-white" />
@@ -188,19 +218,10 @@ export const ZoneDetailPage: React.FC = () => {
                     </span>
                   </div>
                 )}
-                {zone.farming_type && (
-                  <div className="flex items-center gap-1">
-                    <Fish size={12} className="text-emerald-200" />
-                    <span className="text-emerald-200 text-xs">
-                      {zone.farming_type}
-                    </span>
-                  </div>
-                )}
               </div>
             </div>
           </div>
 
-          {/* Right side: status + back button */}
           <div className="flex items-center gap-3 shrink-0">
             <span
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.text}`}
@@ -209,7 +230,6 @@ export const ZoneDetailPage: React.FC = () => {
               {cfg.label}
             </span>
             <button
-              id="back-to-zones"
               onClick={() => navigate('/admin/zones')}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-medium transition-colors"
             >
@@ -217,7 +237,6 @@ export const ZoneDetailPage: React.FC = () => {
               Quay lại
             </button>
             <button
-              id="refresh-zone-detail"
               onClick={fetchZone}
               className="p-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors"
               title="Tải lại"
@@ -227,70 +246,60 @@ export const ZoneDetailPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Zone meta row */}
-        <div className="bg-black/10 px-6 py-2.5 flex gap-6 text-xs text-emerald-100">
+        <div className="bg-black/10 px-6 py-2.5 flex gap-6 text-xs text-emerald-100 font-medium">
           <span>
             ID: <span className="font-mono">{zone.id.slice(0, 8)}…</span>
           </span>
           <span>
-            Tạo ngày:{' '}
-            <span className="font-medium">
-              {new Date(zone.created_at).toLocaleDateString('vi-VN')}
-            </span>
+            Ngày tạo: {new Date(zone.created_at).toLocaleDateString('vi-VN')}
           </span>
         </div>
       </div>
 
-      {/* ===== PLACEHOLDER SECTIONS (other teams plug in here) ===== */}
-
-      {/* Overview quick-stat strip */}
+      {/* Quick Stats Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          {
-            label: 'Ao nuôi',
-            value: '—',
-            icon: <LayoutGrid size={18} />,
-            bg: 'bg-blue-50',
-            text: 'text-blue-700',
-          },
-          {
-            label: 'Thiết bị',
-            value: '—',
-            icon: <Cpu size={18} />,
-            bg: 'bg-purple-50',
-            text: 'text-purple-700',
-          },
-          {
-            label: 'Cảm biến',
-            value: '—',
-            icon: <Activity size={18} />,
-            bg: 'bg-teal-50',
-            text: 'text-teal-700',
-          },
-          {
-            label: 'Cảnh báo hôm nay',
-            value: '—',
-            icon: <Bell size={18} />,
-            bg: 'bg-amber-50',
-            text: 'text-amber-700',
-          },
-        ].map(({ label, value, icon, bg, text }) => (
+        {statsSummary.map(({ label, value, icon, bg, text }) => (
           <div
             key={label}
-            className={`${bg} rounded-2xl p-4 flex items-center gap-3`}
+            className={`${bg} rounded-2xl p-4 flex items-center gap-3 shadow-sm border border-white/50`}
           >
             <div className={`${text} opacity-70`}>{icon}</div>
             <div>
-              <p className={`${text} text-xl font-bold leading-tight`}>
+              <p className={`${text} text-xl font-black leading-tight`}>
                 {value}
               </p>
-              <p className="text-gray-500 text-xs mt-0.5">{label}</p>
+              <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mt-0.5">
+                {label}
+              </p>
             </div>
           </div>
         ))}
       </div>
 
-      {/* 2-column layout for the main placeholder sections */}
+      {/* Danh sách người quản lý (Hiển thị thực tế từ stats) */}
+      <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+        <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <Users size={16} className="text-blue-500" /> Đội ngũ quản lý
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {zone.stats?.managers?.length > 0 ? (
+            zone.stats.managers.map((name: string, index: number) => (
+              <span
+                key={index}
+                className="px-3 py-1.5 bg-slate-50 text-slate-600 rounded-xl text-xs font-bold border border-slate-100 shadow-sm"
+              >
+                {name}
+              </span>
+            ))
+          ) : (
+            <span className="text-gray-400 text-xs italic">
+              Chưa phân công người quản lý trực tiếp
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Main Placeholder Sections */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <PlaceholderSection
           icon={<Activity size={18} className="text-teal-600" />}

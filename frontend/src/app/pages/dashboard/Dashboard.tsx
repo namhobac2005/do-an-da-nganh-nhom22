@@ -521,7 +521,7 @@ export const Dashboard = () => {
           {currentZones.map((z) => (
             <div
               key={z.id}
-              onClick={() => navigate(`/monitoring?zoneId=${z.id}`)}
+              onClick={() => navigate(`/admin/zones/${z.id}`)}
               className="group border border-gray-100 rounded-xl p-5 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer bg-gray-50/30"
             >
               <div className="flex justify-between items-start mb-4">
