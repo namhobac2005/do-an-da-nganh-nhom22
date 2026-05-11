@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 
 import pool from './db.js';
-import { initMQTT, syncAllDataFromAdafruit } from './services/mqtt.service.js';
+import { startIoTSystem } from './services/mqtt.service.js';
 import { runDueSchedules } from './services/schedule.service.ts';
 // Import router
 import deviceRoutes from './routes/device.route.js';
@@ -51,9 +51,7 @@ app.use('/admin/logs', logRoutes);
 app.use('/admin/alerts', alertRoutes);
 
 // ================= START =================
-initMQTT();
-await syncAllDataFromAdafruit();
-// startSensorPolling();
+startIoTSystem();
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);

@@ -35,29 +35,59 @@ export const initMQTT = async () => {
     console.log('✅ MQTT Connected!');
     allKeys.forEach((key) => {
       client.subscribe(`${aioUsername}/feeds/${key}`);
-      console.log(`📡 Đang theo dõi feed: ${key}`);
+      console.log(`Đang theo dõi feed: ${key}`);
     });
   });
 
   client.on('message', async (topic, message) => {
     const feedKey = topic.split('/').pop() || '';
     const value = message.toString();
+    console.log(`Nhận tin real-time: [${feedKey}] -> ${value}`);
 
-    // TÌM THEO FEED_KEY
+    // 1. KIỂM TRA VÀ GHI DỮ LIỆU SENSOR
     const { data: sensor } = await supabase
       .from('sensors')
-      .select('id, pond_id')
-      .eq('feed_key', feedKey) // Thay vì .eq('type', ...)
+      .select('id')
+      .eq('feed_key', feedKey)
       .maybeSingle();
 
     if (sensor) {
-      await supabase
-        .from('sensor_data')
-        .insert([{ sensor_id: sensor.id, value: parseFloat(value) }]);
+      await supabase.from('sensor_data').insert([
+        {
+          sensor_id: sensor.id,
+          value: parseFloat(value),
+        },
+      ]);
+      console.log(`Đã ghi dữ liệu cảm biến ${feedKey}`);
       return;
     }
 
-    // Tương tự cho Actuator...
+    // 2. KIỂM TRA VÀ GHI TRẠNG THÁI ACTUATOR
+    const { data: actuator } = await supabase
+      .from('actuators')
+      .select('id, name')
+      .eq('feed_key', feedKey)
+      .maybeSingle();
+
+    if (actuator) {
+      // Cập nhật trạng thái hiện tại của thiết bị
+      await supabase
+        .from('actuators')
+        .update({ status: value })
+        .eq('id', actuator.id);
+
+      // Ghi lịch sử hoạt động vào bảng actuator_logs
+      // await supabase.from('actuator_logs').insert([
+      //   {
+      //     actuator_id: actuator.id,
+      //     action: 'MQTT Update',
+      //     status: value,
+      //     mode: 'manual', // Mặc định thủ công khi nhận lệnh từ feed
+      //   },
+      // ]);
+
+      console.log(`Đã cập nhật thiết bị: ${actuator.name} -> ${value}`);
+    }
   });
 };
 
@@ -121,4 +151,19 @@ export const syncAllDataFromAdafruit = async () => {
       );
     }
   }
+};
+
+export const startIoTSystem = async () => {
+  // 1. Khởi tạo lắng nghe Real-time (Chỉ ghi khi có thay đổi)
+  await initMQTT();
+
+  // 2. Chạy đồng bộ lần đầu ngay khi mở máy
+  await syncAllDataFromAdafruit();
+
+  // 3. THIẾT LẬP POLLING: Cứ mỗi 5 giây tự đi lấy data 1 lần
+  const SYNC_INTERVAL = 5 * 1000;
+  setInterval(async () => {
+    console.log('⏰ Đến giờ đồng bộ định kỳ...');
+    await syncAllDataFromAdafruit();
+  }, SYNC_INTERVAL);
 };
