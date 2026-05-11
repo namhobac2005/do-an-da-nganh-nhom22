@@ -11,7 +11,7 @@ import * as zoneService from '../services/zone.service';
 export const getAllZones = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    const role   = req.user?.role;
+    const role = req.user?.role;
 
     if (!userId) {
       return res.status(401).json({
@@ -20,7 +20,6 @@ export const getAllZones = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Admin sees everything, user sees only assigned ponds
     const zones = role === 'admin'
       ? await zoneService.listAllZones()
       : await zoneService.listZones(userId);
@@ -47,7 +46,17 @@ export const getAllZones = async (req: AuthRequest, res: Response) => {
 export const getZoneById = async (req: AuthRequest, res: Response) => {
   try {
     const id = String(req.params.id);
-    const zone = await zoneService.getZoneById(id);
+    const userId = req.user?.id;
+    const role = req.user?.role;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Không xác định được danh tính người dùng.',
+      });
+    }
+
+    const zone = await zoneService.getZoneByIdForUser(id, userId, role);
 
     return res.status(200).json({
       success: true,

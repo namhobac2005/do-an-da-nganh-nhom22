@@ -7,6 +7,62 @@ const AIO_KEY = process.env.AIO_KEY;
 const AIO_BASE_URL = `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds`;
 let aioFeedCreationDisabled = false;
 
+const isAdmin = (role?: string) => role === "admin";
+
+const getUserZoneIds = async (userId: string): Promise<string[]> => {
+  const { data, error } = await supabase
+    .from("user_zones")
+    .select("zone_id")
+    .eq("user_id", userId);
+
+  if (error) throw new Error(error.message);
+  return (data || []).map((row: any) => row.zone_id).filter(Boolean);
+};
+
+const getAccessiblePondIds = async (userId: string): Promise<string[]> => {
+  const zoneIds = await getUserZoneIds(userId);
+  if (zoneIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("ponds")
+    .select("id")
+    .in("zone_id", zoneIds);
+
+  if (error) throw new Error(error.message);
+  return (data || []).map((row: any) => row.id).filter(Boolean);
+};
+
+const ensureDeviceAccess = async (
+  deviceId: string,
+  userId?: string,
+  role?: string,
+) => {
+  const { data, error } = await supabase
+    .from("actuators")
+    .select("*, ponds(zone_id)")
+    .eq("id", deviceId)
+    .single();
+
+  if (error || !data) {
+    throw new Error("Không tìm thấy thiết bị: " + (error?.message || ""));
+  }
+
+  if (!userId || isAdmin(role)) {
+    return data;
+  }
+
+  const zoneIds = await getUserZoneIds(userId);
+  const zoneId = data?.ponds?.zone_id || null;
+
+  if (!zoneId || !zoneIds.includes(zoneId)) {
+    throw new Error(
+      "Bạn không có quyền thao tác thiết bị ngoài zone của mình.",
+    );
+  }
+
+  return data;
+};
+
 const aioHeaders = () => ({
   headers: { "X-AIO-Key": AIO_KEY, "Content-Type": "application/json" },
 });
@@ -16,9 +72,36 @@ const aioHeaders = () => ({
  */
 export const getAllDevices = async () => {
   // Đổi từ 'ACTUATOR' thành 'actuators'
-  const { data, error } = await supabase.from("actuators").select("*");
+  const { data, error } = await supabase
+    .from("actuators")
+    .select("*, ponds(zone_id)");
   if (error) throw new Error(error.message);
-  return data;
+  return (data || []).map((device: any) => ({
+    ...device,
+    zone_id: device?.ponds?.zone_id || null,
+  }));
+};
+
+export const getAllDevicesForUser = async (userId?: string, role?: string) => {
+  if (!userId || isAdmin(role)) {
+    return getAllDevices();
+  }
+
+  const pondIds = await getAccessiblePondIds(userId);
+  if (pondIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("actuators")
+    .select("*, ponds(zone_id)")
+    .in("pond_id", pondIds)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return (data || []).map((device: any) => ({
+    ...device,
+    zone_id: device?.ponds?.zone_id || null,
+  }));
 };
 
 /**
@@ -28,16 +111,10 @@ export const controlDevice = async (
   deviceId: string,
   level: number,
   userId?: string,
+  role?: string,
 ) => {
-  // 1. Lấy thông tin từ bảng 'actuators'
-  const { data: device, error: fetchErr } = await supabase
-    .from("actuators")
-    .select("*")
-    .eq("id", deviceId) // Cột là 'id' chứ không phải 'DeviceID'
-    .single();
-
-  if (fetchErr || !device)
-    throw new Error("Không tìm thấy thiết bị: " + fetchErr?.message);
+  // 1. Lấy thông tin từ bảng 'actuators' và kiểm tra zone trước khi điều khiển
+  const device = await ensureDeviceAccess(deviceId, userId, role);
 
   const feedKey = device.type.toLowerCase();
 
@@ -84,8 +161,80 @@ export const getDeviceLogs = async (
   actuatorId?: string,
   from?: string,
   to?: string,
+  userId?: string,
+  role?: string,
 ) => {
   try {
+    if (!userId || isAdmin(role)) {
+      let query = supabase
+        .from("actuator_logs")
+        .select(
+          "id, actuator_id, action, mode, status, user_id, timestamp, actuators(name, type)",
+        )
+        .order("timestamp", { ascending: false })
+        .limit(limit);
+
+      if (actuatorId) {
+        query = query.eq("actuator_id", actuatorId);
+      }
+      if (from) {
+        query = query.gte("timestamp", from);
+      }
+      if (to) {
+        query = query.lte("timestamp", to);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error("[Backend] Error fetching logs with join:", error);
+        let fallbackQuery = supabase
+          .from("actuator_logs")
+          .select("id, actuator_id, action, mode, status, user_id, timestamp")
+          .order("timestamp", { ascending: false })
+          .limit(limit);
+
+        if (actuatorId) {
+          fallbackQuery = fallbackQuery.eq("actuator_id", actuatorId);
+        }
+        if (from) {
+          fallbackQuery = fallbackQuery.gte("timestamp", from);
+        }
+        if (to) {
+          fallbackQuery = fallbackQuery.lte("timestamp", to);
+        }
+
+        const { data: fallbackData, error: fallbackError } =
+          await fallbackQuery;
+        if (fallbackError) throw new Error(fallbackError.message);
+        return (fallbackData || []).map((item: any) => ({
+          ...item,
+          created_at: item.created_at || item.timestamp || null,
+        }));
+      }
+
+      return (data || []).map((item: any) => ({
+        ...item,
+        created_at: item.created_at || item.timestamp || null,
+      }));
+    }
+
+    const pondIds = await getAccessiblePondIds(userId);
+    if (pondIds.length === 0) return [];
+
+    const { data: deviceRows, error: deviceError } = await supabase
+      .from("actuators")
+      .select("id")
+      .in("pond_id", pondIds);
+
+    if (deviceError) throw new Error(deviceError.message);
+
+    const accessibleDeviceIds = (deviceRows || [])
+      .map((row: any) => row.id)
+      .filter(Boolean);
+
+    if (accessibleDeviceIds.length === 0) return [];
+
     let query = supabase
       .from("actuator_logs")
       .select(
@@ -93,6 +242,8 @@ export const getDeviceLogs = async (
       )
       .order("timestamp", { ascending: false })
       .limit(limit);
+
+    query = query.in("actuator_id", accessibleDeviceIds);
 
     if (actuatorId) {
       query = query.eq("actuator_id", actuatorId);
@@ -114,6 +265,8 @@ export const getDeviceLogs = async (
         .select("id, actuator_id, action, mode, status, user_id, timestamp")
         .order("timestamp", { ascending: false })
         .limit(limit);
+
+      fallbackQuery = fallbackQuery.in("actuator_id", accessibleDeviceIds);
 
       if (actuatorId) {
         fallbackQuery = fallbackQuery.eq("actuator_id", actuatorId);
@@ -146,14 +299,31 @@ export const getDeviceLogs = async (
 /**
  * Tạo thiết bị mới
  */
-export const createDevice = async (deviceData: {
-  name: string;
-  type: "pump" | "fan" | "light" | "servo";
-  feed_key?: string | undefined;
-  pond_id?: string;
-  mode?: "auto" | "manual";
-  description?: string;
-}) => {
+export const createDevice = async (
+  deviceData: {
+    name: string;
+    type: "pump" | "fan" | "light" | "servo";
+    feed_key?: string | undefined;
+    pond_id?: string;
+    mode?: "auto" | "manual";
+    description?: string;
+  },
+  userId?: string,
+  role?: string,
+) => {
+  if (userId && !isAdmin(role)) {
+    if (!deviceData.pond_id) {
+      throw new Error(
+        "Người dùng chỉ có thể tạo thiết bị trong ao thuộc zone của mình.",
+      );
+    }
+
+    const pondIds = await getAccessiblePondIds(userId);
+    if (!pondIds.includes(deviceData.pond_id)) {
+      throw new Error("Bạn không có quyền tạo thiết bị ở ao này.");
+    }
+  }
+
   // If feed_key not provided, auto-generate a unique feed key based on name
   let feedKey = (deviceData.feed_key || "").trim();
   const slugify = (s: string) =>
@@ -246,11 +416,14 @@ export const createDevice = async (deviceData: {
           : {},
       ),
     ])
-    .select()
+    .select("*, ponds(zone_id)")
     .single();
 
   if (error) throw new Error(error.message);
-  return data;
+  return {
+    ...data,
+    zone_id: data?.ponds?.zone_id || null,
+  };
 };
 
 /**
@@ -266,22 +439,44 @@ export const updateDevice = async (
     mode?: "auto" | "manual";
     description?: string;
   },
+  userId?: string,
+  role?: string,
 ) => {
+  await ensureDeviceAccess(deviceId, userId, role);
+
+  if (userId && !isAdmin(role) && deviceData.pond_id) {
+    const pondIds = await getAccessiblePondIds(userId);
+    if (!pondIds.includes(deviceData.pond_id)) {
+      throw new Error(
+        "Bạn không có quyền chuyển thiết bị sang ao ngoài zone của mình.",
+      );
+    }
+  }
+
   const { data, error } = await supabase
     .from("actuators")
     .update(deviceData)
     .eq("id", deviceId)
-    .select()
+    .select("*, ponds(zone_id)")
     .single();
 
   if (error) throw new Error(error.message);
-  return data;
+  return {
+    ...data,
+    zone_id: data?.ponds?.zone_id || null,
+  };
 };
 
 /**
  * Xóa thiết bị
  */
-export const deleteDevice = async (deviceId: string) => {
+export const deleteDevice = async (
+  deviceId: string,
+  userId?: string,
+  role?: string,
+) => {
+  await ensureDeviceAccess(deviceId, userId, role);
+
   // Fetch device to get feed_key
   const { data: device, error: fetchErr } = await supabase
     .from("actuators")
@@ -320,7 +515,13 @@ export const deleteDevice = async (deviceId: string) => {
 /**
  * Lấy thiết bị theo ID
  */
-export const getDeviceById = async (deviceId: string) => {
+export const getDeviceById = async (
+  deviceId: string,
+  userId?: string,
+  role?: string,
+) => {
+  await ensureDeviceAccess(deviceId, userId, role);
+
   const { data, error } = await supabase
     .from("actuators")
     .select("*, ponds(zone_id)")

@@ -11,26 +11,26 @@ import { supabaseAdmin as supabase } from '../lib/supabase.client.ts';
 // ===== TYPES =====
 
 export interface Zone {
-  id:           string;
-  name:         string;
-  location:     string | null;
+  id: string;
+  name: string;
+  location: string | null;
   farming_type: string | null;
-  status:       'active' | 'inactive' | 'maintenance';
-  created_at:   string;
+  status: 'active' | 'inactive' | 'maintenance';
+  created_at: string;
 }
 
 export interface CreateZoneDto {
-  name:          string;
-  location?:     string;
+  name: string;
+  location?: string;
   farming_type?: string;
-  status?:       'active' | 'inactive' | 'maintenance';
+  status?: 'active' | 'inactive' | 'maintenance';
 }
 
 export interface UpdateZoneDto {
-  name?:         string;
-  location?:     string;
+  name?: string;
+  location?: string;
   farming_type?: string;
-  status?:       'active' | 'inactive' | 'maintenance';
+  status?: 'active' | 'inactive' | 'maintenance';
 }
 
 // ===== FUNCTIONS =====
@@ -79,14 +79,33 @@ export const getZoneById = async (id: string): Promise<Zone> => {
   return data as Zone;
 };
 
+export const getZoneByIdForUser = async (
+  id: string,
+  userId: string,
+  role?: string,
+): Promise<Zone> => {
+  if (!userId || role === 'admin') {
+    return getZoneById(id);
+  }
+
+  const zones = await listZones(userId);
+  const zone = zones.find((item) => item.id === id);
+
+  if (!zone) {
+    throw new Error('Bạn không có quyền truy cập zone này.');
+  }
+
+  return zone;
+};
+
 export const createZone = async (dto: CreateZoneDto): Promise<Zone> => {
   const { data, error } = await supabase
     .from('ponds')
     .insert({
-      name:         dto.name,
-      location:     dto.location     ?? null,
+      name: dto.name,
+      location: dto.location ?? null,
       farming_type: dto.farming_type ?? null,
-      status:       dto.status       ?? 'active',
+      status: dto.status ?? 'active',
     })
     .select()
     .single();
@@ -100,10 +119,10 @@ export const updateZone = async (
   dto: UpdateZoneDto,
 ): Promise<Zone> => {
   const updateData: Record<string, any> = {};
-  if (dto.name         !== undefined) updateData.name         = dto.name;
-  if (dto.location     !== undefined) updateData.location     = dto.location;
+  if (dto.name !== undefined) updateData.name = dto.name;
+  if (dto.location !== undefined) updateData.location = dto.location;
   if (dto.farming_type !== undefined) updateData.farming_type = dto.farming_type;
-  if (dto.status       !== undefined) updateData.status       = dto.status;
+  if (dto.status !== undefined) updateData.status = dto.status;
 
   const { data, error } = await supabase
     .from('ponds')

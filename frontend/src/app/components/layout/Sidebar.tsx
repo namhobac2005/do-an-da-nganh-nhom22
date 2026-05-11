@@ -96,6 +96,26 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    title: "THIẾT BỊ & NHẬT KÝ",
+    items: [
+      {
+        path: "/devices",
+        label: "Thiết Bị Của Tôi",
+        icon: <Cpu size={18} />,
+      },
+      {
+        path: "/device-logs",
+        label: "Nhật Ký Điều Khiển",
+        icon: <Activity size={18} />,
+      },
+      {
+        path: "/control",
+        label: "Điều Khiển Thiết Bị",
+        icon: <Zap size={18} />,
+      },
+    ],
+  },
+  {
     title: "GIÁM SÁT & VẬN HÀNH",
     items: [
       {
@@ -181,6 +201,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         {/* Navigation Menu */}
         <nav className="flex-1 overflow-y-auto hide-scrollbar py-4 px-3 space-y-5">
           {NAV_GROUPS.map((group) => {
+            if (group.title === "THIẾT BỊ & NHẬT KÝ" && hasRole("admin")) {
+              return null;
+            }
+
             // Lọc menu theo role
             const visibleItems = group.items.filter(
               (item) => !item.adminOnly || hasRole("admin"),
