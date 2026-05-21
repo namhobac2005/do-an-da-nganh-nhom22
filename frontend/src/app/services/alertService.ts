@@ -7,7 +7,7 @@ import { api } from './api';
 
 // ===== TYPES =====
 
-export type TargetType = 'zone' | 'farming_type';
+export type TargetType = 'pond' | 'farming_type';
 export type Metric     = 'pH' | 'temperature' | 'DO';
 export type AlertStatus = 'unread' | 'resolved';
 
@@ -63,11 +63,12 @@ export const deleteThreshold = (id: string): Promise<void> =>
 // ===== ALERT LOGS =====
 
 export const getAlertLogs = (
-  params: { status?: AlertStatus; zoneId?: string; page?: number; limit?: number } = {}
+  params: { status?: AlertStatus; pondId?: string; zoneId?: string; page?: number; limit?: number } = {}
 ): Promise<AlertLogsPage> => {
   const qs = new URLSearchParams();
   if (params.status) qs.set('status', params.status);
-  if (params.zoneId) qs.set('zoneId', params.zoneId);
+  if (params.pondId) qs.set('pondId', params.pondId);   // filter by specific pond
+  if (params.zoneId) qs.set('zoneId', params.zoneId);   // filter by zone (legacy)
   if (params.page)   qs.set('page',   String(params.page));
   if (params.limit)  qs.set('limit',  String(params.limit));
   const query = qs.toString() ? `?${qs.toString()}` : '';

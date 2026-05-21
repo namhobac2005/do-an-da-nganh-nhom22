@@ -41,7 +41,7 @@ export const UserTable: React.FC<UserTableProps> = ({
 }) => {
   const filtered = users.filter((u) => {
     const matchSearch =
-      (u.full_name ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (u.username ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email.toLowerCase().includes(searchQuery.toLowerCase());
     const matchRole = filterRole === 'all' || u.role === filterRole;
     return matchSearch && matchRole;
@@ -129,11 +129,11 @@ export const UserTable: React.FC<UserTableProps> = ({
                           user.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-emerald-100 text-emerald-700'
                         }`}
                       >
-                        {(user.full_name ?? user.email).charAt(0).toUpperCase()}
+                        {(user.username ?? user.email).charAt(0).toUpperCase()}
                       </div>
                       <div>
                         <p className="text-gray-900 text-sm font-semibold leading-tight">
-                          {user.full_name ?? '—'}
+                          {user.username ?? '—'}
                         </p>
                         <p className="text-gray-400 text-xs">{user.email}</p>
                         {user.phone && (

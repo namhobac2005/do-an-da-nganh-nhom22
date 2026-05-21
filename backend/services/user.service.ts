@@ -21,7 +21,7 @@ import bcrypt from 'bcrypt';
 export interface UserProfile {
   id:         string;
   email:      string;
-  full_name:  string | null;
+  username:   string | null;
   phone:      string | null;
   role:       'admin' | 'user';
   status:     'active' | 'inactive';
@@ -33,14 +33,14 @@ export interface UserProfile {
 export interface CreateUserDto {
   email:     string;
   password:  string;
-  fullName?: string;
+  username?: string;
   phone?:    string;
   role?:     'admin' | 'user';
   pondIds?:  string[];
 }
 
 export interface UpdateUserDto {
-  fullName?: string;
+  username?: string;
   phone?:    string;
   role?:     'admin' | 'user';
   status?:   'active' | 'inactive';
@@ -118,7 +118,7 @@ export const createUser = async (dto: CreateUserDto): Promise<UserProfile> => {
     .insert({
       email:     dto.email,
       password:  hashedPassword,
-      full_name: dto.fullName ?? null,
+      username:  dto.username ?? null,
       phone:     dto.phone    ?? null,
       role:      dto.role     ?? 'user',
       status:    'active',
@@ -145,7 +145,7 @@ export const updateUser = async (
   dto: UpdateUserDto
 ): Promise<UserProfile> => {
   const userUpdate: Record<string, any> = {};
-  if (dto.fullName !== undefined) userUpdate.full_name = dto.fullName;
+  if (dto.username !== undefined) userUpdate.username = dto.username;
   if (dto.phone    !== undefined) userUpdate.phone     = dto.phone;
   if (dto.role     !== undefined) userUpdate.role      = dto.role;
   if (dto.status   !== undefined) userUpdate.status    = dto.status;

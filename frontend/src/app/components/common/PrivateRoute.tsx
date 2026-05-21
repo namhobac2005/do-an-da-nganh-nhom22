@@ -6,7 +6,7 @@
 
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
-import type { UserRole } from '../../data/mockData';
+import type { UserRole } from '../../types/user.types';
 
 interface PrivateRouteProps {
   /** Chỉ cho phép role nhất định truy cập (optional) */

@@ -23,13 +23,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Sun,
-  MapPin,
-  Fish,
 } from 'lucide-react';
 
 // Import các Service thực tế từ dự án của bạn
 import * as sensorService from '../../services/sensorService';
 import * as dashboardService from '../../services/dashboardService';
+import { ZonePondSelector } from '../../components/common/ZonePondSelector';
 
 // --- Thành phần: Thẻ chỉ số KPI (Hàng trên cùng) ---
 const StatCard = ({ title, value, subtitle, icon, color, bgColor }: any) => (
@@ -136,9 +135,8 @@ export const Dashboard = () => {
     dashboardService.ZoneOverview[]
   >([]);
 
-  // --- States cho Bộ lọc và Cảm biến theo Ao ---
-  const [zones, setZones] = useState<sensorService.Zone[]>([]);
-  const [ponds, setPonds] = useState<sensorService.Pond[]>([]);
+  // --- States cho Cảm biến theo Ao (driven by ZonePondSelector) ---
+  // selectedZone: kept only for building the navigate URL to /monitoring
   const [selectedZone, setSelectedZone] = useState<string>('');
   const [selectedPond, setSelectedPond] = useState<string>('');
   const [sensorStatusData, setSensorStatusData] = useState<
@@ -154,54 +152,21 @@ export const Dashboard = () => {
     dashboardService.getKPIs().then(setKpis);
     dashboardService.getRecentAlerts(5).then(setRecentAlerts);
     dashboardService.getZonesOverview().then(setZonesOverview);
-
-    sensorService.getZones().then((data) => {
-      setZones(data);
-      // Bỏ đoạn tự động chọn Zone ở đây để nó hiện "-- Chọn Vùng Nuôi --"
-    });
   }, []);
 
-  // 2. Khi chọn Zone: Lấy danh sách Ao của Zone đó
-  useEffect(() => {
-    if (!selectedZone) {
-      setPonds([]); // Nếu không chọn vùng thì xóa danh sách ao
-      return;
-    }
-    sensorService.getPondsByZone(selectedZone).then((data) => {
-      setPonds(data);
-      setSelectedPond(''); // Cố tình set rỗng để hiện "-- Chọn Ao Nuôi --"
-    });
-  }, [selectedZone]);
-
-  // 2. Khi chọn Zone: Lấy danh sách Ao của Zone đó
-  useEffect(() => {
-    if (!selectedZone) return;
-    sensorService.getPondsByZone(selectedZone).then((data) => {
-      setPonds(data);
-      if (data.length > 0) setSelectedPond(data[0].id);
-      else setSelectedPond('');
-    });
-  }, [selectedZone]);
-
-  // 3. Khi chọn Ao: Lấy dữ liệu cảm biến mới nhất
+  // 2. Khi chọn Ao (via ZonePondSelector): Lấy dữ liệu cảm biến mới nhất
   useEffect(() => {
     if (!selectedPond) {
       setSensorStatusData([]);
       return;
     }
 
-    // Hàm gọi API
     const fetchLatestData = () => {
       sensorService.getLatestSensors(selectedPond).then(setSensorStatusData);
     };
 
-    // 1. Gọi ngay lập tức lần đầu tiên khi vừa chọn Ao
     fetchLatestData();
-
-    // 2. Cài đặt bộ đếm (Interval) cứ 5 giây (5000ms) gọi lại hàm 1 lần
     const interval = setInterval(fetchLatestData, 5000);
-
-    // 3. Clean-up: Hủy bộ đếm khi bạn chọn sang Ao khác hoặc rời khỏi trang Dashboard
     return () => clearInterval(interval);
   }, [selectedPond]);
 
@@ -278,52 +243,21 @@ export const Dashboard = () => {
             </p>
           </div>
 
-          {/* THANH CHỌN KHU VỰC & AO (Style giống Monitoring) */}
-          <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto">
-            <div className="bg-slate-50 p-3 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3 flex-1 xl:min-w-[220px]">
-              <MapPin className="text-slate-400" size={18} />
-              <select
-                className="w-full bg-transparent font-semibold text-slate-700 outline-none text-sm cursor-pointer"
-                value={selectedZone}
-                onChange={(e) => {
-                  setSelectedZone(e.target.value);
-                  setSelectedPond('');
-                }}
-              >
-                <option value="">-- Chọn Vùng Nuôi --</option>
-                {zones.map((z) => (
-                  <option key={z.id} value={z.id}>
-                    {z.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="bg-slate-50 p-3 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3 flex-1 xl:min-w-[220px]">
-              <Fish className="text-slate-400" size={18} />
-              <select
-                className="w-full bg-transparent font-semibold text-slate-700 outline-none text-sm cursor-pointer"
-                disabled={!selectedZone}
-                value={selectedPond}
-                onChange={(e) => setSelectedPond(e.target.value)}
-              >
-                <option value="">-- Chọn Ao Nuôi --</option>
-                {ponds.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          {/* CASCADING ZONE > POND SELECTOR */}
+          <ZonePondSelector
+            onPondSelect={(pondId) => setSelectedPond(pondId)}
+            onZoneSelect={(zoneId) => setSelectedZone(zoneId)}
+            className="w-full xl:w-auto xl:min-w-[480px]"
+          />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {!selectedZone || !selectedPond ? (
-            /* TRẠNG THÁI CHƯA CHỌN VÙNG/AO */
+          {!selectedPond ? (
+            /* TRẠNG THÁI CHƯA CHỌN AO */
             <div className="col-span-full py-12 text-center text-gray-400 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
               <Activity size={32} className="mx-auto mb-3 opacity-20" />
-              <p>Vui lòng chọn Vùng và Ao để xem dữ liệu tức thời.</p>
+              <p className="font-medium">Chưa chọn ao nuôi</p>
+              <p className="text-xs mt-1">Vui lòng chọn Vùng nuôi, sau đó chọn Ao nuôi để xem dữ liệu tức thời.</p>
             </div>
           ) : sensorStatusData.length > 0 ? (
             /* TRẠNG THÁI CÓ DỮ LIỆU */
@@ -521,7 +455,7 @@ export const Dashboard = () => {
           {currentZones.map((z) => (
             <div
               key={z.id}
-              onClick={() => navigate(`/admin/zones/${z.id}`)}
+              onClick={() => navigate(`/zones/${z.id}/ponds`)}
               className="group border border-gray-100 rounded-xl p-5 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer bg-gray-50/30"
             >
               <div className="flex justify-between items-start mb-4">

@@ -1,26 +1,28 @@
 /**
  * UserFormDialog.tsx
  * Radix UI Dialog-based form to Create or Edit a user.
- * Supports full name, email, password (create only), phone, role, and multi-pond assignment.
+ * Supports username, email, password (create only), phone, role, and multi-pond assignment.
+ * Uses real zone/pond data from the API — no mock data.
  */
 
-import { useEffect, useReducer, useCallback } from 'react';
+import { useEffect, useReducer, useCallback, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Loader2, Eye, EyeOff, MapPin, Shield, User } from 'lucide-react';
-import type { UserProfile, Zone, CreateUserDto, UpdateUserDto } from '../../types/user.types';
+import type { UserProfile, CreateUserDto, UpdateUserDto } from '../../types/user.types';
+import * as zoneService from '../../services/zoneService';
 
 // ===== FORM STATE =====
 
 interface FormState {
-  fullName:   string;
-  email:      string;
-  password:   string;
-  phone:      string;
-  role:       'admin' | 'user';
-  pondIds:    string[];
-  showPwd:    boolean;
+  username:     string;
+  email:        string;
+  password:     string;
+  phone:        string;
+  role:         'admin' | 'user';
+  pondIds:      string[];
+  showPwd:      boolean;
   isSubmitting: boolean;
-  error:      string | null;
+  error:        string | null;
 }
 
 type FormAction =
@@ -31,7 +33,7 @@ type FormAction =
   | { type: 'RESET'; user?: UserProfile };
 
 const initialState = (user?: UserProfile): FormState => ({
-  fullName:     user?.full_name ?? '',
+  username:     user?.username ?? '',
   email:        user?.email     ?? '',
   password:     '',
   phone:        user?.phone     ?? '',
@@ -66,7 +68,6 @@ interface UserFormDialogProps {
   onClose:   () => void;
   onSubmit:  (dto: CreateUserDto | UpdateUserDto) => Promise<void>;
   editUser?: UserProfile | null;
-  ponds:     Zone[];
 }
 
 export const UserFormDialog: React.FC<UserFormDialogProps> = ({
@@ -74,10 +75,44 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({
   onClose,
   onSubmit,
   editUser,
-  ponds,
 }) => {
   const isEdit = !!editUser;
   const [state, dispatch] = useReducer(reducer, initialState(editUser ?? undefined));
+
+  // Real ponds fetched from API, grouped by zone
+  const [pondsByZone, setPondsByZone] = useState<{ zone: { id: string; name: string }; ponds: { id: string; name: string; farming_type: string | null }[] }[]>([]);
+  const [pondsLoading, setPondsLoading] = useState(false);
+
+  // Fetch zones then ponds for each zone
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setPondsLoading(true);
+
+    zoneService.getZones()
+      .then(async (zones: any[]) => {
+        if (cancelled) return;
+        const results = await Promise.all(
+          (zones || []).map(async (z: any) => {
+            try {
+              const ponds = await zoneService.getPondsByZone(z.id);
+              return { zone: { id: z.id, name: z.name }, ponds: ponds || [] };
+            } catch {
+              return { zone: { id: z.id, name: z.name }, ponds: [] };
+            }
+          })
+        );
+        if (!cancelled) setPondsByZone(results.filter((r) => r.ponds.length > 0));
+      })
+      .catch(() => {
+        if (!cancelled) setPondsByZone([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPondsLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [open]);
 
   // Reset form when dialog opens/closes or editUser changes
   useEffect(() => {
@@ -101,7 +136,7 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({
       try {
         const dto: CreateUserDto | UpdateUserDto = isEdit
           ? {
-              fullName: state.fullName || undefined,
+              username: state.username || undefined,
               phone:    state.phone    || undefined,
               role:     state.role,
               pondIds:  state.pondIds,
@@ -109,7 +144,7 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({
           : {
               email:    state.email,
               password: state.password,
-              fullName: state.fullName || undefined,
+              username: state.username || undefined,
               phone:    state.phone    || undefined,
               role:     state.role,
               pondIds:  state.pondIds,
@@ -124,6 +159,9 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({
     },
     [state, isEdit, onSubmit, onClose]
   );
+
+  // Total ponds count for display
+  const totalPonds = pondsByZone.reduce((sum, g) => sum + g.ponds.length, 0);
 
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
@@ -157,16 +195,16 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
-            {/* Full name */}
+            {/* Username */}
             <div>
-              <label htmlFor="fullName" className="block text-xs font-medium text-gray-600 mb-1.5">
+              <label htmlFor="username" className="block text-xs font-medium text-gray-600 mb-1.5">
                 Họ và tên
               </label>
               <input
-                id="fullName"
+                id="username"
                 type="text"
-                value={state.fullName}
-                onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'fullName', value: e.target.value })}
+                value={state.username}
+                onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'username', value: e.target.value })}
                 placeholder="Nguyễn Văn A"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all"
               />
@@ -259,53 +297,72 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({
               </div>
             </div>
 
-            {/* Pond assignment (only for regular users) */}
+            {/* Pond assignment — grouped by Zone — uses real pond IDs */}
             {state.role === 'user' && (
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-2">
                   <MapPin size={12} className="inline mr-1" />
                   Phân công ao nuôi
+                  {state.pondIds.length > 0 && (
+                    <span className="ml-1.5 text-teal-600">({state.pondIds.length} đã chọn)</span>
+                  )}
                 </label>
-                {ponds.length === 0 ? (
+                {pondsLoading ? (
+                  <div className="flex items-center gap-2 text-gray-400 text-xs py-3">
+                    <Loader2 size={14} className="animate-spin" /> Đang tải danh sách ao nuôi...
+                  </div>
+                ) : totalPonds === 0 ? (
                   <p className="text-gray-400 text-xs">Chưa có ao nuôi nào trong hệ thống.</p>
                 ) : (
-                  <div className="grid grid-cols-1 gap-2">
-                    {ponds.map((pond) => {
-                      const checked = state.pondIds.includes(pond.id);
-                      return (
-                        <button
-                          key={pond.id}
-                          type="button"
-                          id={`pond-${pond.id}`}
-                          onClick={() => dispatch({ type: 'TOGGLE_POND', pondId: pond.id })}
-                          className={`flex items-center justify-between px-3 py-2.5 rounded-xl border-2 text-sm transition-all text-left ${
-                            checked
-                              ? 'border-teal-400 bg-teal-50 text-teal-800'
-                              : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                          }`}
-                        >
-                          <span className="font-medium">{pond.name}</span>
-                          <div className="flex items-center gap-2">
-                            {pond.location && (
-                              <span className="text-xs text-gray-400">{pond.location}</span>
-                            )}
-                            <div
-                              className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
-                                checked
-                                  ? 'bg-teal-500 border-teal-500'
-                                  : 'border-gray-300'
-                              }`}
-                            >
-                              {checked && (
-                                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                                  <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                              )}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
+                  <div className="space-y-3 max-h-48 overflow-y-auto">
+                    {pondsByZone.map((group) => (
+                      <div key={group.zone.id}>
+                        {/* Zone header */}
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 px-1">
+                          {group.zone.name}
+                        </p>
+                        <div className="grid grid-cols-1 gap-1.5">
+                          {group.ponds.map((pond) => {
+                            const checked = state.pondIds.includes(pond.id);
+                            return (
+                              <button
+                                key={pond.id}
+                                type="button"
+                                id={`pond-${pond.id}`}
+                                onClick={() => dispatch({ type: 'TOGGLE_POND', pondId: pond.id })}
+                                className={`flex items-center justify-between px-3 py-2.5 rounded-xl border-2 text-sm transition-all text-left ${
+                                  checked
+                                    ? 'border-teal-400 bg-teal-50 text-teal-800'
+                                    : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                }`}
+                              >
+                                <span className="font-medium">
+                                  {pond.name}
+                                  {pond.farming_type && (
+                                    <span className="ml-1.5 text-xs text-gray-400 font-normal">
+                                      ({pond.farming_type})
+                                    </span>
+                                  )}
+                                </span>
+                                <div
+                                  className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
+                                    checked
+                                      ? 'bg-teal-500 border-teal-500'
+                                      : 'border-gray-300'
+                                  }`}
+                                >
+                                  {checked && (
+                                    <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                                      <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

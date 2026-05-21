@@ -17,7 +17,7 @@ import { alertEmitter, type AlertTriggeredPayload } from '../lib/alert.events.ts
 
 // ===== TYPES =====
 
-export type TargetType = 'zone' | 'farming_type';
+export type TargetType = 'pond' | 'farming_type';
 export type Metric = 'pH' | 'temperature' | 'DO';
 
 export interface Threshold {
@@ -59,11 +59,11 @@ export const listThresholds = async (pondIds?: string[]): Promise<Threshold[]> =
     .select('*')
     .order('created_at', { ascending: false });
 
-  // Zone-based security: filter by pond IDs for non-admin users
+  // Pond-based security: filter by pond IDs for non-admin users
   if (pondIds && pondIds.length > 0) {
     // Show thresholds that target one of the user's ponds OR are farming_type-level
     query = query.or(
-      `target_type.eq.farming_type,and(target_type.eq.zone,target_id.in.(${pondIds.join(',')}))`
+      `target_type.eq.farming_type,and(target_type.eq.pond,target_id.in.(${pondIds.join(',')}))`
     );
   }
 
@@ -212,11 +212,11 @@ export const evaluateSensorData = async (
   // 1. Find the most specific applicable threshold (zone > farming_type)
   let threshold: Threshold | null = null;
 
-  // Try zone-specific first
+  // Try pond-specific first
   const { data: zoneThreshold } = await supabaseAdmin
     .from('thresholds')
     .select('*')
-    .eq('target_type', 'zone')
+    .eq('target_type', 'pond')
     .eq('target_id', zoneId)
     .eq('metric', metric)
     .maybeSingle();

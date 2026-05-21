@@ -6,40 +6,31 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 const isAdmin = (role?: string) => role === "admin";
 
-const getUserZoneIds = async (userId: string) => {
+const getUserPondIds = async (userId: string) => {
   const { data, error } = await supabase
-    .from("user_zones")
-    .select("zone_id")
+    .from("user_ponds")
+    .select("pond_id")
     .eq("user_id", userId);
 
   if (error) throw error;
-  return (data || []).map((row) => row.zone_id).filter(Boolean) as string[];
+  return (data || []).map((row) => row.pond_id).filter(Boolean) as string[];
 };
 
-const getPondZoneId = async (pondId: string) => {
-  const { data, error } = await supabase
-    .from("ponds")
-    .select("zone_id")
-    .eq("id", pondId)
-    .single();
-
-  if (error) throw error;
-  return data?.zone_id || null;
+// Check if a user has access to a specific pond via user_ponds
+const userHasPondAccess = async (userId: string, pondId: string) => {
+  const pondIds = await getUserPondIds(userId);
+  return pondIds.includes(pondId);
 };
 
-const ensureZoneAccess = async (userId: string, zoneId: string) => {
-  const zoneIds = await getUserZoneIds(userId);
-  if (!zoneIds.includes(zoneId)) {
-    throw new Error("Bạn không có quyền truy cập zone này.");
+const ensurePondAccessById = async (userId: string, pondId: string) => {
+  const hasAccess = await userHasPondAccess(userId, pondId);
+  if (!hasAccess) {
+    throw new Error("Bạn không có quyền truy cập ao nuôi này.");
   }
 };
 
 const ensurePondAccess = async (userId: string, pondId: string) => {
-  const zoneId = await getPondZoneId(pondId);
-  if (!zoneId) {
-    throw new Error("Không tìm thấy ao cần truy cập.");
-  }
-  await ensureZoneAccess(userId, zoneId);
+  await ensurePondAccessById(userId, pondId);
 };
 
 // Lấy lịch sử dữ liệu của các sensor thuộc một Pond cụ thể
@@ -92,31 +83,46 @@ export const getLatestSensorsByPond = async (pondId: string) => {
   }));
 };
 
+// Lấy danh sách Vùng nuôi (Zone) mà User được quản lý
 export const getAllZones = async (userId: string) => {
-  if (!userId) throw new Error("Yêu cầu userId để lấy danh sách khu vực");
+  if (!userId) throw new Error("Yêu cầu userId để lấy danh sách vùng nuôi");
 
-  const { data, error } = await supabase
-    .from("zones")
-    // Sử dụng !inner join để bắt buộc zone này phải có mặt trong bảng user_zones ứng với userId
-    .select("id, name, user_zones!inner(user_id)")
-    .eq("user_zones.user_id", userId);
+  // Step 1: Get user's assigned pond IDs
+  const { data: userPonds, error: upErr } = await supabase
+    .from("user_ponds")
+    .select("pond_id")
+    .eq("user_id", userId);
 
-  if (error) throw error;
+  if (upErr) throw upErr;
+  
+  const pondIds = (userPonds || []).map((row: any) => row.pond_id).filter(Boolean) as string[];
+  if (pondIds.length === 0) return [];
 
-  // Format lại dữ liệu bỏ đi cục user_zones dư thừa
-  return data.map((zone) => ({
-    id: zone.id,
-    name: zone.name,
-  }));
-};
-
-export const getPondsByZone = async (zoneId: string) => {
-  const { data, error } = await supabase
+  // Step 2: Get zone_ids from those ponds
+  const { data: ponds, error: pErr } = await supabase
     .from("ponds")
+    .select("zone_id")
+    .in("id", pondIds);
+
+  if (pErr) throw pErr;
+  
+  const zoneIds = [...new Set((ponds || []).map((p: any) => p.zone_id).filter(Boolean))];
+  if (zoneIds.length === 0) return [];
+
+  // Step 3: Fetch zones with those IDs
+  const { data: zones, error: zErr } = await supabase
+    .from("zones")
     .select("id, name")
-    .eq("zone_id", zoneId);
-  if (error) throw error;
-  return data;
+    .in("id", zoneIds)
+    .order("name", { ascending: true });
+
+  if (zErr) throw zErr;
+
+  // Format and return clean zone objects
+  return (zones || []).map((z: any) => ({
+    id: z.id,
+    name: z.name,
+  }));
 };
 
 export const getPondsByZoneForUser = async (
@@ -124,12 +130,31 @@ export const getPondsByZoneForUser = async (
   userId: string,
   role?: string,
 ) => {
-  if (!userId || isAdmin(role)) {
-    return getPondsByZone(zoneId);
+  // Admin: get all ponds in zone
+  if (role === "admin") {
+    const { data, error } = await supabase
+      .from("ponds")
+      .select("id, name")
+      .eq("zone_id", zoneId)
+      .order("name", { ascending: true });
+
+    if (error) throw error;
+    return data || [];
   }
 
-  await ensureZoneAccess(userId, zoneId);
-  return getPondsByZone(zoneId);
+  // User: filter by user_ponds assignment
+  const pondIds = await getUserPondIds(userId);
+  if (pondIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("ponds")
+    .select("id, name")
+    .eq("zone_id", zoneId)
+    .in("id", pondIds)
+    .order("name", { ascending: true });
+
+  if (error) throw error;
+  return data || [];
 };
 
 export const getLatestSensorsByPondForUser = async (

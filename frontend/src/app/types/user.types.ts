@@ -1,41 +1,83 @@
 /**
  * user.types.ts
- * Shared TypeScript interfaces for the User Management module (frontend).
+ * Shared TypeScript interfaces for Zone > Pond hierarchy + User management.
  */
 
-// ===== CORE MODELS =====
+// ===== CORE ENUMS =====
 
 export type UserRole   = 'admin' | 'user';
 export type UserStatus = 'active' | 'inactive';
 export type ZoneStatus = 'active' | 'inactive' | 'maintenance';
+export type PondStatus = 'active' | 'inactive' | 'maintenance';
+
+// ===== ZONE (Vùng nuôi) =====
 
 export interface Zone {
-  id:           string;
-  name:         string;
-  location:     string | null;
-  farming_type: string | null;
-  status:       ZoneStatus;
-  created_at:   string;
+  id:         string;
+  name:       string;
+  location:   string | null;
+  status:     ZoneStatus;
+  created_at: string;
+  pond_count?: number;      // populated by backend
 }
 
 export interface CreateZoneDto {
-  name:          string;
-  location?:     string;
-  farming_type?: string;
-  status?:       ZoneStatus;
+  name:      string;
+  location?: string;
+  status?:   ZoneStatus;
 }
 
 export interface UpdateZoneDto {
+  name?:     string;
+  location?: string;
+  status?:   ZoneStatus;
+}
+
+// ===== POND (Ao nuôi) =====
+
+export interface Pond {
+  id:           string;
+  zone_id:      string;
+  name:         string;
+  location:     string | null;
+  farming_type: string | null;
+  status:       PondStatus;
+  created_at:   string;
+  sensor_count?:   number;    // populated by backend
+  actuator_count?: number;    // populated by backend
+}
+
+export interface PondDetail extends Pond {
+  zone_name: string | null;
+  sensors?:    { id: string; name: string; type: string; status: string }[];
+  actuators?:  { id: string; name: string; type: string; status: string }[];
+  stats: {
+    totalSensors:   number;
+    totalActuators: number;
+    managers:       string[];
+  };
+}
+
+export interface CreatePondDto {
+  name:          string;
+  location?:     string;
+  farming_type?: string;
+  status?:       PondStatus;
+}
+
+export interface UpdatePondDto {
   name?:         string;
   location?:     string;
   farming_type?: string;
-  status?:       ZoneStatus;
+  status?:       PondStatus;
 }
+
+// ===== USER =====
 
 export interface UserProfile {
   id:         string;
   email:      string;
-  full_name:  string | null;
+  username:   string | null;
   phone:      string | null;
   role:       UserRole;
   status:     UserStatus;
@@ -60,14 +102,14 @@ export interface ActivityLog {
 export interface CreateUserDto {
   email:     string;
   password:  string;
-  fullName?: string;
+  username?: string;
   phone?:    string;
   role?:     UserRole;
   pondIds?:  string[];
 }
 
 export interface UpdateUserDto {
-  fullName?: string;
+  username?: string;
   phone?:    string;
   role?:     UserRole;
   status?:   UserStatus;
@@ -101,7 +143,7 @@ export interface AuthResponse {
     id:       string;
     email:    string;
     role:     UserRole;
-    fullName: string | null;
+    username: string | null;
     phone:    string | null;
     status:   string;
   };

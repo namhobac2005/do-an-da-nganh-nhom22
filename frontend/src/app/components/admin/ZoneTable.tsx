@@ -1,9 +1,11 @@
 /**
  * ZoneTable.tsx
- * Grid of zone cards. Clicking "Xem chi tiết" navigates to /admin/zones/:id.
+ * Grid of zone cards with RBAC and fast-action navigation links.
+ * - Edit/Delete buttons: admin only.
+ * - Dashboard/Devices/Alerts quick links: all users.
  */
 
-import { useNavigate } from 'react-router';
+import { useNavigate, Link } from 'react-router';
 import {
   Pencil,
   Trash2,
@@ -13,7 +15,11 @@ import {
   ArrowRight,
   RefreshCw,
   AlertCircle,
+  LayoutDashboard,
+  Cpu,
+  Bell,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import type { Zone } from '../../types/user.types';
 
 const STATUS_CONFIG = {
@@ -55,6 +61,8 @@ export const ZoneTable: React.FC<ZoneTableProps> = ({
   onRetry,
 }) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
 
   if (isLoading) {
     return (
@@ -110,7 +118,7 @@ export const ZoneTable: React.FC<ZoneTableProps> = ({
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       {zones.map((zone) => {
-        const cfg = STATUS_CONFIG[zone.status];
+        const cfg = STATUS_CONFIG[zone.status] || STATUS_CONFIG.active;
         return (
           <div
             key={zone.id}
@@ -151,54 +159,81 @@ export const ZoneTable: React.FC<ZoneTableProps> = ({
 
             {/* Body */}
             <div className="p-5 flex flex-col gap-3 flex-1">
-              {/* Farming type tag */}
-              {zone.farming_type ? (
-                <div className="flex items-center gap-1.5">
-                  <Fish size={13} className="text-teal-500 shrink-0" />
-                  <span className="text-sm text-teal-700 font-medium">
-                    {zone.farming_type}
-                  </span>
-                </div>
-              ) : (
-                <p className="text-xs text-gray-300 italic">
-                  Chưa có loại nuôi
-                </p>
-              )}
+              {/* Pond count */}
+              <div className="flex items-center gap-1.5">
+                <Fish size={13} className="text-teal-500 shrink-0" />
+                <span className="text-sm text-teal-700 font-medium">
+                  {zone.pond_count ?? 0} ao nuôi
+                </span>
+              </div>
 
               {/* Created at */}
               <p className="text-xs text-gray-400">
                 Tạo ngày {new Date(zone.created_at).toLocaleDateString('vi-VN')}
               </p>
 
+              {/* Fast-action navigation links — ALL users */}
+              <div className="flex items-center gap-1.5 pt-2">
+                <Link
+                  to={`/admin/dashboard?zoneId=${zone.id}`}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-[11px] font-semibold hover:bg-blue-100 transition-colors"
+                  title="Dashboard"
+                >
+                  <LayoutDashboard size={12} />
+                  Dashboard
+                </Link>
+                <Link
+                  to={`/admin/devices?zoneId=${zone.id}`}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-[11px] font-semibold hover:bg-purple-100 transition-colors"
+                  title="Thiết bị"
+                >
+                  <Cpu size={12} />
+                  Thiết bị
+                </Link>
+                <Link
+                  to={`/admin/alerts?zoneId=${zone.id}`}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-[11px] font-semibold hover:bg-amber-100 transition-colors"
+                  title="Cảnh báo"
+                >
+                  <Bell size={12} />
+                  Cảnh báo
+                </Link>
+              </div>
+
               {/* Actions */}
               <div className="flex items-center gap-2 pt-3 border-t border-gray-100 mt-auto">
                 {/* View detail — primary CTA */}
                 <button
                   id={`view-zone-${zone.id}`}
-                  onClick={() => navigate(`/admin/zones/${zone.id}`)}
+                  onClick={() => navigate(`/zones/${zone.id}/ponds`)}
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-teal-50 text-teal-700 rounded-lg text-xs font-semibold hover:bg-teal-100 transition-colors"
                 >
                   Xem chi tiết
                   <ArrowRight size={12} />
                 </button>
 
-                <button
-                  id={`edit-zone-${zone.id}`}
-                  onClick={() => onEdit(zone)}
-                  className="p-2 rounded-lg text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
-                  title="Chỉnh sửa"
-                >
-                  <Pencil size={14} />
-                </button>
+                {/* Admin-only: Edit & Delete */}
+                {isAdmin && (
+                  <>
+                    <button
+                      id={`edit-zone-${zone.id}`}
+                      onClick={() => onEdit(zone)}
+                      className="p-2 rounded-lg text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
+                      title="Chỉnh sửa"
+                    >
+                      <Pencil size={14} />
+                    </button>
 
-                <button
-                  id={`delete-zone-${zone.id}`}
-                  onClick={() => onDelete(zone)}
-                  className="p-2 rounded-lg text-red-500 border border-red-100 hover:bg-red-50 transition-colors"
-                  title="Xóa"
-                >
-                  <Trash2 size={14} />
-                </button>
+                    <button
+                      id={`delete-zone-${zone.id}`}
+                      onClick={() => onDelete(zone)}
+                      className="p-2 rounded-lg text-red-500 border border-red-100 hover:bg-red-50 transition-colors"
+                      title="Xóa"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>

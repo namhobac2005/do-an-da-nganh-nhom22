@@ -31,14 +31,14 @@ export const getUser = async (req: AuthRequest, res: Response): Promise<void> =>
 /** POST /admin/users */
 export const createUser = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { email, password, fullName, phone, role, pondIds } = req.body;
+    const { email, password, username, phone, role, pondIds } = req.body;
 
     if (!email || !password) {
       res.status(400).json({ success: false, message: 'Email và mật khẩu là bắt buộc.' });
       return;
     }
 
-    const user = await userService.createUser({ email, password, fullName, phone, role, pondIds });
+    const user = await userService.createUser({ email, password, username, phone, role, pondIds });
 
     await logService.createLog({
       actorId: req.user!.id,
@@ -59,9 +59,9 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
 export const updateUser = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const id = String(req.params.id);
-    const { fullName, phone, role, status, pondIds } = req.body;
+    const { username, phone, role, status, pondIds } = req.body;
 
-    const user = await userService.updateUser(id, { fullName, phone, role, status, pondIds });
+    const user = await userService.updateUser(id, { username, phone, role, status, pondIds });
 
     await logService.createLog({
       actorId: req.user!.id,

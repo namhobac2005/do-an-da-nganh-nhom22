@@ -1,25 +1,28 @@
 /**
  * routes.tsx
- * Bước 2: Cấu hình routing toàn bộ ứng dụng
+ * Cấu hình routing cho kiến trúc Zone > Pond phân cấp.
  *
  * Cấu trúc Route:
- * /login                    → Trang đăng nhập (public)
- * /                         → Protected (yêu cầu đăng nhập)
- *   /dashboard              → Dashboard tổng quan
- *   /admin/zones            → Quản lý vùng ao (Admin only)
- *   /admin/ponds            → Quản lý ao nuôi (Admin only)
- *   /admin/devices          → Quản lý thiết bị (Admin only)
- *   /admin/users            → Quản lý tài khoản (Admin only)
- *   /devices                → Quản lý thiết bị của user (theo zone được gán)
- *   /monitoring             → Giám sát Real-time
- *   /control                → UC13: Điều khiển thiết bị
- *   /device-logs            → Nhật ký điều khiển thiết bị
- *   /alerts                 → Cảnh báo & Ngưỡng
- *   /reports                → Báo cáo & Thống kê
- *   /chatbot                → Chatbot AI
- *   /settings               → Cài đặt (placeholder)
- * /403                      → Không có quyền
- * *                         → 404 Not Found
+ * /login                                       → Trang đăng nhập (public)
+ * /                                             → Protected (yêu cầu đăng nhập)
+ *   /dashboard                                  → Dashboard tổng quan
+ *   /zones                                      → Danh sách Vùng Nuôi (tất cả user)
+ *   /zones/:zoneId/ponds                        → Ao nuôi trong vùng (tất cả user)
+ *   /zones/:zoneId/ponds/:pondId                → Chi tiết ao nuôi (tất cả user)
+ *   /admin/devices                              → Quản lý thiết bị (Admin only)
+ *   /admin/users                                → Quản lý tài khoản (Admin only)
+ *   /admin/alerts                               → Cảnh báo & Ngưỡng (Admin only)
+ *   /admin/logs                                 → Nhật ký hành động (Admin only)
+ *   /devices                                    → Thiết bị của user
+ *   /monitoring                                 → Giám sát Real-time
+ *   /control                                    → Điều khiển thiết bị
+ *   /device-logs                                → Nhật ký điều khiển
+ *   /alerts                                     → Cảnh báo
+ *   /reports                                    → Báo cáo & Thống kê
+ *   /chatbot                                    → Chatbot AI
+ *   /settings                                   → Cài đặt
+ * /403                                          → Không có quyền
+ * *                                             → 404 Not Found
  */
 
 import { createBrowserRouter, Navigate } from "react-router";
@@ -38,7 +41,8 @@ import { CanhBao } from "./pages/alerts/CanhBao";
 import { BaoCao } from "./pages/reports/BaoCao";
 import { Chatbot } from "./pages/chatbot/Chatbot";
 import { ZonesPage } from "./pages/admin/ZonesPage";
-import { ZoneDetailPage } from "./pages/admin/ZoneDetailPage";
+import { PondsByZonePage } from "./pages/admin/PondsByZonePage";
+import { PondDetailPage } from "./pages/admin/PondDetailPage";
 import { DevicesPage } from "./pages/admin/DevicesPage";
 import { UsersPage } from "./pages/admin/UsersPage";
 import { ActivityLogsPage } from "./pages/admin/ActivityLogsPage";
@@ -104,7 +108,12 @@ export const router = createBrowserRouter([
           // Dashboard
           { path: "dashboard", element: <Dashboard /> },
 
-          // Thiết bị của user (lọc theo zone gán trong backend)
+          // ===== Zone > Pond Hierarchy (All Authenticated Users) =====
+          { path: "zones", element: <ZonesPage /> },
+          { path: "zones/:zoneId/ponds", element: <PondsByZonePage /> },
+          { path: "zones/:zoneId/ponds/:pondId", element: <PondDetailPage /> },
+
+          // Thiết bị của user (lọc theo pond gán trong backend)
           { path: "devices", element: <DevicesPage /> },
 
           // ===== Admin Only Routes =====
@@ -112,9 +121,7 @@ export const router = createBrowserRouter([
             path: "admin",
             element: <PrivateRoute requiredRole="admin" />,
             children: [
-              { index: true, element: <Navigate to="/admin/zones" replace /> },
-              { path: "zones", element: <ZonesPage /> },
-              { path: "zones/:zoneId", element: <ZoneDetailPage /> },
+              { index: true, element: <Navigate to="/zones" replace /> },
               { path: "devices", element: <DevicesPage /> },
               { path: "users", element: <UsersPage /> },
               { path: "alerts", element: <AlertsPage /> },

@@ -47,17 +47,16 @@ const NAV_GROUPS: NavGroup[] = [
         label: "Dashboard",
         icon: <LayoutDashboard size={18} />,
       },
+      {
+        path: "/zones",
+        label: "Vùng Nuôi",
+        icon: <Waves size={18} />,
+      },
     ],
   },
   {
     title: "QUẢN TRỊ HỆ THỐNG",
     items: [
-      {
-        path: "/admin/zones",
-        label: "Vùng Ao (Zone)",
-        icon: <Waves size={18} />,
-        adminOnly: true,
-      },
       {
         label: "Thiết Bị",
         icon: <Cpu size={18} />,
@@ -100,7 +99,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         path: "/devices",
-        label: "Thiết Bị Của Tôi",
+        label: "Quản Lý Thiết Bị",
         icon: <Cpu size={18} />,
       },
       {
@@ -112,6 +111,11 @@ const NAV_GROUPS: NavGroup[] = [
         path: "/control",
         label: "Điều Khiển Thiết Bị",
         icon: <Zap size={18} />,
+      },
+      {
+        path: "/alerts",
+        label: "Cảnh Báo & Ngưỡng",
+        icon: <BellRing size={18} />,
       },
     ],
   },
@@ -364,7 +368,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                 className="text-white"
                 style={{ fontSize: "13px", fontWeight: 700 }}
               >
-                {user?.name?.charAt(0).toUpperCase()}
+                {user?.username?.charAt(0).toUpperCase()}
               </span>
             </div>
             <div className="flex-1 min-w-0">
@@ -372,7 +376,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                 className="text-white truncate"
                 style={{ fontSize: "13px", fontWeight: 600 }}
               >
-                {user?.name}
+                {user?.username}
               </p>
               <p
                 className="text-white/50 truncate"

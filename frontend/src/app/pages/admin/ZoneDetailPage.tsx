@@ -1,7 +1,8 @@
 /**
  * ZoneDetailPage.tsx
  * Trang chi tiết vùng ao (UC01 — Master-Detail).
- * Kết nối dữ liệu thực từ Backend (stats: ponds, sensors, actuators, alerts).
+ * Kết nối dữ liệu thực từ Backend (stats: ponds, sensors, actuators).
+ * Quick-action links to Dashboard, Devices, Alerts at the top.
  */
 
 import { useState, useEffect } from 'react';
@@ -18,7 +19,7 @@ import {
   LayoutGrid,
   AlertCircle,
   Loader2,
-  ArrowUpRight,
+  LayoutDashboard,
   Users,
 } from 'lucide-react';
 import * as zoneService from '../../services/zoneService';
@@ -88,7 +89,6 @@ export const ZoneDetailPage: React.FC = () => {
   const { zoneId } = useParams<{ zoneId: string }>();
   const navigate = useNavigate();
 
-  // zone state bây giờ sẽ chứa thêm thuộc tính stats từ Backend
   const [zone, setZone] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +98,6 @@ export const ZoneDetailPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      // Gọi service lấy chi tiết zone kèm theo stats thực tế
       const data = await zoneService.getZoneById(zoneId);
       setZone(data);
     } catch (err: any) {
@@ -254,6 +253,48 @@ export const ZoneDetailPage: React.FC = () => {
             Ngày tạo: {new Date(zone.created_at).toLocaleDateString('vi-VN')}
           </span>
         </div>
+      </div>
+
+      {/* Quick-Action Link Buttons — prominent navigation to sub-modules */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Link
+          to={`/admin/dashboard?zoneId=${zone.id}`}
+          className="flex items-center gap-3 px-5 py-4 bg-blue-50 border border-blue-100 rounded-2xl hover:bg-blue-100 transition-colors group"
+        >
+          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+            <LayoutDashboard size={20} className="text-blue-700" />
+          </div>
+          <div>
+            <p className="text-blue-800 text-sm font-bold">Dashboard</p>
+            <p className="text-blue-500 text-xs">Tổng quan vùng ao</p>
+          </div>
+        </Link>
+
+        <Link
+          to={`/admin/devices?zoneId=${zone.id}`}
+          className="flex items-center gap-3 px-5 py-4 bg-purple-50 border border-purple-100 rounded-2xl hover:bg-purple-100 transition-colors group"
+        >
+          <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center group-hover:bg-purple-200 transition-colors">
+            <Cpu size={20} className="text-purple-700" />
+          </div>
+          <div>
+            <p className="text-purple-800 text-sm font-bold">Thiết bị</p>
+            <p className="text-purple-500 text-xs">Quản lý thiết bị</p>
+          </div>
+        </Link>
+
+        <Link
+          to={`/admin/alerts?zoneId=${zone.id}`}
+          className="flex items-center gap-3 px-5 py-4 bg-amber-50 border border-amber-100 rounded-2xl hover:bg-amber-100 transition-colors group"
+        >
+          <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center group-hover:bg-amber-200 transition-colors">
+            <Bell size={20} className="text-amber-700" />
+          </div>
+          <div>
+            <p className="text-amber-800 text-sm font-bold">Cảnh báo</p>
+            <p className="text-amber-500 text-xs">Xem cảnh báo & ngưỡng</p>
+          </div>
+        </Link>
       </div>
 
       {/* Quick Stats Grid */}

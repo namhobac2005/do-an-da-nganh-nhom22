@@ -9,27 +9,19 @@ let aioFeedCreationDisabled = false;
 
 const isAdmin = (role?: string) => role === "admin";
 
-const getUserZoneIds = async (userId: string): Promise<string[]> => {
+const getUserPondIds = async (userId: string): Promise<string[]> => {
   const { data, error } = await supabase
-    .from("user_zones")
-    .select("zone_id")
+    .from("user_ponds")
+    .select("pond_id")
     .eq("user_id", userId);
 
   if (error) throw new Error(error.message);
-  return (data || []).map((row: any) => row.zone_id).filter(Boolean);
+  return (data || []).map((row: any) => row.pond_id).filter(Boolean);
 };
 
 const getAccessiblePondIds = async (userId: string): Promise<string[]> => {
-  const zoneIds = await getUserZoneIds(userId);
-  if (zoneIds.length === 0) return [];
-
-  const { data, error } = await supabase
-    .from("ponds")
-    .select("id")
-    .in("zone_id", zoneIds);
-
-  if (error) throw new Error(error.message);
-  return (data || []).map((row: any) => row.id).filter(Boolean);
+  // user_ponds directly maps users to ponds — no intermediate zone table
+  return getUserPondIds(userId);
 };
 
 const ensureDeviceAccess = async (
@@ -39,7 +31,7 @@ const ensureDeviceAccess = async (
 ) => {
   const { data, error } = await supabase
     .from("actuators")
-    .select("*, ponds(zone_id)")
+    .select("*")
     .eq("id", deviceId)
     .single();
 
@@ -51,12 +43,12 @@ const ensureDeviceAccess = async (
     return data;
   }
 
-  const zoneIds = await getUserZoneIds(userId);
-  const zoneId = data?.ponds?.zone_id || null;
+  const pondIds = await getAccessiblePondIds(userId);
+  const pondId = data?.pond_id || null;
 
-  if (!zoneId || !zoneIds.includes(zoneId)) {
+  if (!pondId || !pondIds.includes(pondId)) {
     throw new Error(
-      "Bạn không có quyền thao tác thiết bị ngoài zone của mình.",
+      "Bạn không có quyền thao tác thiết bị ngoài ao nuôi của mình.",
     );
   }
 
@@ -71,15 +63,11 @@ const aioHeaders = () => ({
  * Lấy danh sách thiết bị từ bảng actuators
  */
 export const getAllDevices = async () => {
-  // Đổi từ 'ACTUATOR' thành 'actuators'
   const { data, error } = await supabase
     .from("actuators")
-    .select("*, ponds(zone_id)");
+    .select("*");
   if (error) throw new Error(error.message);
-  return (data || []).map((device: any) => ({
-    ...device,
-    zone_id: device?.ponds?.zone_id || null,
-  }));
+  return data || [];
 };
 
 export const getAllDevicesForUser = async (userId?: string, role?: string) => {
@@ -92,16 +80,12 @@ export const getAllDevicesForUser = async (userId?: string, role?: string) => {
 
   const { data, error } = await supabase
     .from("actuators")
-    .select("*, ponds(zone_id)")
+    .select("*")
     .in("pond_id", pondIds)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-
-  return (data || []).map((device: any) => ({
-    ...device,
-    zone_id: device?.ponds?.zone_id || null,
-  }));
+  return data || [];
 };
 
 /**
@@ -416,14 +400,11 @@ export const createDevice = async (
           : {},
       ),
     ])
-    .select("*, ponds(zone_id)")
+    .select("*")
     .single();
 
   if (error) throw new Error(error.message);
-  return {
-    ...data,
-    zone_id: data?.ponds?.zone_id || null,
-  };
+  return data;
 };
 
 /**
@@ -448,7 +429,7 @@ export const updateDevice = async (
     const pondIds = await getAccessiblePondIds(userId);
     if (!pondIds.includes(deviceData.pond_id)) {
       throw new Error(
-        "Bạn không có quyền chuyển thiết bị sang ao ngoài zone của mình.",
+        "Bạn không có quyền chuyển thiết bị sang ao ngoài quyền của mình.",
       );
     }
   }
@@ -457,14 +438,11 @@ export const updateDevice = async (
     .from("actuators")
     .update(deviceData)
     .eq("id", deviceId)
-    .select("*, ponds(zone_id)")
+    .select("*")
     .single();
 
   if (error) throw new Error(error.message);
-  return {
-    ...data,
-    zone_id: data?.ponds?.zone_id || null,
-  };
+  return data;
 };
 
 /**
@@ -524,15 +502,10 @@ export const getDeviceById = async (
 
   const { data, error } = await supabase
     .from("actuators")
-    .select("*, ponds(zone_id)")
+    .select("*")
     .eq("id", deviceId)
     .single();
 
   if (error) throw new Error(error.message);
-
-  // Flatten zone_id from joined ponds table for easier access
-  return {
-    ...data,
-    zone_id: data?.ponds?.zone_id || null,
-  };
+  return data;
 };

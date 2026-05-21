@@ -18,21 +18,36 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { MOCK_ALERTS } from '../../data/mockData';
 
 // ===== PAGE TITLE MAP =====
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   '/dashboard': { title: 'Dashboard', subtitle: 'Tổng quan hệ thống' },
-  '/admin/zones': { title: 'Quản Lý Vùng Ao', subtitle: 'Quản lý các khu vực ao nuôi' },
-  '/admin/ponds': { title: 'Quản Lý Ao Nuôi', subtitle: 'Danh sách ao nuôi theo khu vực' },
+  '/zones': { title: 'Vùng Nuôi', subtitle: 'Quản lý các vùng nuôi trồng thủy sản' },
   '/admin/devices': { title: 'Quản Lý Thiết Bị', subtitle: 'Máy bơm, sục khí, cảm biến...' },
   '/admin/users': { title: 'Quản Lý Tài Khoản', subtitle: 'Phân quyền người dùng' },
   '/monitoring': { title: 'Giám Sát Real-time', subtitle: 'Dữ liệu cảm biến theo thời gian thực' },
   '/control': { title: 'Điều Khiển Thiết Bị', subtitle: 'Vận hành và lập lịch thiết bị' },
-  '/alerts': { title: 'Cảnh Báo', subtitle: 'Nhật ký cảnh báo và ngưỡng thiết lập' },
+  '/devices': { title: 'Quản Lý Thiết Bị', subtitle: 'Thiết bị trong các ao nuôi của bạn' },
+  '/alerts': { title: 'Cảnh Báo & Ngưỡng', subtitle: 'Thiết lập ngưỡng và nhật ký cảnh báo' },
   '/reports': { title: 'Báo Cáo & Thống Kê', subtitle: 'Xuất báo cáo Excel/PDF' },
   '/chatbot': { title: 'Chatbot AI', subtitle: 'Hỏi đáp thông minh và điều khiển giọng nói' },
   '/settings': { title: 'Cài Đặt', subtitle: 'Cài đặt hệ thống' },
+};
+
+/** Match dynamic zone/pond routes */
+const getPageTitle = (pathname: string) => {
+  // Exact match first
+  if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
+
+  // Dynamic matches for zone > pond hierarchy
+  if (/^\/zones\/[^/]+\/ponds\/[^/]+$/.test(pathname)) {
+    return { title: 'Chi Tiết Ao Nuôi', subtitle: 'Dashboard, thiết bị, cảnh báo' };
+  }
+  if (/^\/zones\/[^/]+\/ponds$/.test(pathname)) {
+    return { title: 'Ao Nuôi', subtitle: 'Danh sách ao nuôi trong vùng' };
+  }
+
+  return { title: 'AquaSmart', subtitle: 'Hệ thống quản lý ao nuôi' };
 };
 
 interface HeaderProps {
@@ -47,13 +62,10 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
   const [isOnline] = useState(true); // Giả lập trạng thái kết nối IoT
 
   // Lấy title trang hiện tại
-  const currentPage = PAGE_TITLES[location.pathname] || {
-    title: 'AquaSmart',
-    subtitle: 'Hệ thống quản lý ao nuôi',
-  };
+  const currentPage = getPageTitle(location.pathname);
 
-  // Số thông báo chưa đọc
-  const unreadAlerts = MOCK_ALERTS.filter((a) => !a.isRead).length;
+  // Số thông báo chưa đọc — sẽ kết nối API thật sau
+  const unreadAlerts = 0;
 
   return (
     <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-6 shrink-0 z-10">
@@ -137,32 +149,12 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
                 <p className="text-gray-500" style={{ fontSize: '12px' }}>{unreadAlerts} chưa đọc</p>
               </div>
               <div className="max-h-72 overflow-y-auto">
-                {MOCK_ALERTS.filter((a) => !a.isRead).slice(0, 4).map((alert) => (
-                  <div key={alert.id} className="p-4 border-b border-gray-50 hover:bg-gray-50 cursor-pointer">
-                    <div className="flex items-start gap-3">
-                      <span
-                        className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                          alert.severity === 'critical'
-                            ? 'bg-red-500'
-                            : alert.severity === 'warning'
-                            ? 'bg-amber-500'
-                            : 'bg-blue-500'
-                        }`}
-                      />
-                      <div>
-                        <p className="text-gray-800" style={{ fontSize: '13px', fontWeight: 500 }}>
-                          {alert.pondName} - {alert.sensorType}
-                        </p>
-                        <p className="text-gray-500" style={{ fontSize: '12px' }}>
-                          {alert.message.substring(0, 60)}...
-                        </p>
-                        <p className="text-gray-400 mt-1" style={{ fontSize: '11px' }}>
-                          {new Date(alert.timestamp).toLocaleString('vi-VN')}
-                        </p>
-                      </div>
-                    </div>
+                {/* TODO: Wire to real alerts API */}
+                {unreadAlerts === 0 && (
+                  <div className="p-6 text-center">
+                    <p className="text-gray-400" style={{ fontSize: '13px' }}>Không có thông báo mới</p>
                   </div>
-                ))}
+                )}
               </div>
               <div className="p-3 text-center">
                 <button className="text-emerald-600 hover:underline" style={{ fontSize: '13px', fontWeight: 500 }}>
@@ -184,11 +176,11 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
           >
             <div className="w-7 h-7 bg-emerald-600 rounded-full flex items-center justify-center">
               <span className="text-white" style={{ fontSize: '12px', fontWeight: 700 }}>
-                {user?.name?.charAt(0).toUpperCase()}
+                {user?.username?.charAt(0).toUpperCase()}
               </span>
             </div>
             <span className="hidden sm:block text-gray-700" style={{ fontSize: '13px', fontWeight: 500 }}>
-              {user?.name?.split(' ').pop()}
+              {user?.username?.split(' ').pop()}
             </span>
             <ChevronDown size={14} className="text-gray-400" />
           </button>
@@ -198,7 +190,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
             <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-xl border border-gray-100 z-50">
               <div className="p-4 border-b border-gray-100">
                 <p className="text-gray-900" style={{ fontSize: '13px', fontWeight: 600 }}>
-                  {user?.name}
+                  {user?.username}
                 </p>
                 <p className="text-gray-500" style={{ fontSize: '12px' }}>{user?.email}</p>
                 <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-white ${user?.role === 'admin' ? 'bg-purple-500' : 'bg-emerald-500'}`}

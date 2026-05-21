@@ -10,8 +10,7 @@ import { Plus, RefreshCw, Users, ShieldCheck, UserCheck, UserX, AlertCircle } fr
 import { UserTable }      from '../../components/admin/UserTable';
 import { UserFormDialog } from '../../components/admin/UserFormDialog';
 import * as userService   from '../../services/userService';
-import * as zoneService   from '../../services/zoneService';
-import type { UserProfile, Zone, CreateUserDto, UpdateUserDto } from '../../types/user.types';
+import type { UserProfile, CreateUserDto, UpdateUserDto } from '../../types/user.types';
 
 // ===== STAT CARD =====
 const StatCard: React.FC<{
@@ -33,7 +32,6 @@ const StatCard: React.FC<{
 // ===== PAGE =====
 export const UsersPage: React.FC = () => {
   const [users,       setUsers]       = useState<UserProfile[]>([]);
-  const [ponds,       setPonds]       = useState<Zone[]>([]);
   const [isLoading,   setIsLoading]   = useState(true);
   const [error,       setError]       = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,12 +44,8 @@ export const UsersPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [usersData, pondsData] = await Promise.all([
-        userService.getUsers(),
-        zoneService.getZones(),
-      ]);
+      const usersData = await userService.getUsers();
       setUsers(usersData);
-      setPonds(pondsData);
     } catch (err: any) {
       setError(err.message ?? 'Không thể tải dữ liệu. Vui lòng thử lại.');
     } finally {
@@ -174,7 +168,6 @@ export const UsersPage: React.FC = () => {
         onClose={handleClose}
         onSubmit={handleSubmit}
         editUser={editUser}
-        ponds={ponds}
       />
     </div>
   );

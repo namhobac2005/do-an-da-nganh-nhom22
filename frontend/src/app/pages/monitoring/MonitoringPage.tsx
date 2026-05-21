@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import axios from 'axios';
-import { useSearchParams } from 'react-router'; // 1. IMPORT useSearchParams
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router';
 import {
   LineChart,
   Line,
@@ -15,12 +14,10 @@ import {
   ThermometerSun,
   Waves,
   Sun,
-  MapPin,
-  Fish,
   Activity,
 } from 'lucide-react';
-
-const API_BASE_URL = 'http://localhost:5000/sensors';
+import { ZonePondSelector } from '../../components/common/ZonePondSelector';
+import * as sensorService from '../../services/sensorService';
 
 const SENSOR_META: Record<string, any> = {
   temperature: {
@@ -47,102 +44,44 @@ const SENSOR_META: Record<string, any> = {
 };
 
 export const MonitoringPage: React.FC = () => {
-  // 2. KHỞI TẠO useSearchParams
   const [searchParams] = useSearchParams();
-  const urlZoneId = searchParams.get('zoneId');
-  const urlPondId = searchParams.get('pondId');
+  const urlZoneId  = searchParams.get('zoneId');
+  const urlPondId  = searchParams.get('pondId');
 
-  const [dbZones, setDbZones] = useState<any[]>([]);
-  const [dbPonds, setDbPonds] = useState<any[]>([]);
-  const [selectedZone, setSelectedZone] = useState<string>('');
-  const [selectedPond, setSelectedPond] = useState<string>('');
+  const [selectedPond, setSelectedPond] = useState<string>(urlPondId || '');
+  const [sensors,      setSensors]      = useState<sensorService.SensorData[]>([]);
+  const [history,      setHistory]      = useState<sensorService.HistoryRecord[]>([]);
+  const [isLoading,    setIsLoading]    = useState(false);
 
-  const [sensors, setSensors] = useState<any[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-
-  // 1. Lấy danh sách Vùng nuôi khi load trang
-  useEffect(() => {
-    const fetchZones = async () => {
-      try {
-        const res = await axios.get(`${API_BASE_URL}/zones`);
-        const sortedZones = (res.data || []).sort((a: any, b: any) =>
-          a.name.localeCompare(b.name, 'vi', { sensitivity: 'base' }),
-        );
-        setDbZones(sortedZones);
-
-        // 3. TỰ ĐỘNG CHỌN VÙNG (Nếu có ID trên URL)
-        if (urlZoneId && sortedZones.some((z: any) => z.id === urlZoneId)) {
-          setSelectedZone(urlZoneId);
-        }
-      } catch (err) {
-        console.error('Lỗi lấy Zone:', err);
-      }
-    };
-    fetchZones();
-  }, [urlZoneId]); // Thêm urlZoneId vào dependency
-
-  // 2. Lấy danh sách Ao khi chọn Vùng
-  useEffect(() => {
-    const fetchPonds = async () => {
-      if (!selectedZone) {
-        setDbPonds([]);
-        return;
-      }
-      try {
-        const res = await axios.get(
-          `${API_BASE_URL}/zones/${selectedZone}/ponds`,
-        );
-        const sortedPonds = (res.data || []).sort((a: any, b: any) =>
-          a.name.localeCompare(b.name, 'vi', { sensitivity: 'base' }),
-        );
-        setDbPonds(sortedPonds);
-
-        // 4. TỰ ĐỘNG CHỌN AO (Nếu có ID trên URL)
-        if (urlPondId && sortedPonds.some((p: any) => p.id === urlPondId)) {
-          setSelectedPond(urlPondId);
-        } else if (sortedPonds.length > 0 && urlZoneId) {
-          // Nếu từ Dashboard qua (chỉ có urlZoneId) mà chưa chọn Ao, ta tự động chọn Ao đầu tiên luôn cho nhanh
-          setSelectedPond(sortedPonds[0].id);
-        } else if (!urlPondId) {
-          // Reset pond nếu đổi zone bằng tay (không thông qua URL)
-          setSelectedPond('');
-        }
-      } catch (err) {
-        console.error('Lỗi lấy Pond:', err);
-      }
-    };
-    fetchPonds();
-  }, [selectedZone, urlPondId, urlZoneId]); // Thêm dependencies
-
-  // 3. Hàm fetch dữ liệu cảm biến (Latest & History)
-  const loadMonitoringData = async () => {
-    if (!selectedPond) return;
+  // Fetch cảm biến mới nhất + lịch sử cho ao đang chọn
+  const loadMonitoringData = useCallback(async (pondId: string) => {
+    if (!pondId) return;
     setIsLoading(true);
     try {
-      const [resLatest, resHistory] = await Promise.all([
-        axios.get(`${API_BASE_URL}/latest`, {
-          params: { pondId: selectedPond },
-        }),
-        axios.get(`${API_BASE_URL}/history`, {
-          params: { pondId: selectedPond, limit: 50 },
-        }),
+      const [latestData, historyData] = await Promise.all([
+        sensorService.getLatestSensors(pondId),
+        sensorService.getSensorHistory(pondId, 50),
       ]);
-      setSensors(resLatest.data || []);
-      setHistory(resHistory.data || []);
+      setSensors(latestData);
+      setHistory(historyData);
     } catch (err) {
-      console.error('Lỗi load dữ liệu giám sát:', err);
+      console.error('[MonitoringPage] Lỗi load dữ liệu giám sát:', err);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  // Tự động reload sau mỗi 10 giây
+  // Tải lại khi ao thay đổi, tự động refresh mỗi 10 giây
   useEffect(() => {
-    loadMonitoringData();
-    const interval = setInterval(loadMonitoringData, 10000);
+    if (!selectedPond) {
+      setSensors([]);
+      setHistory([]);
+      return;
+    }
+    loadMonitoringData(selectedPond);
+    const interval = setInterval(() => loadMonitoringData(selectedPond), 10_000);
     return () => clearInterval(interval);
-  }, [selectedPond]);
+  }, [selectedPond, loadMonitoringData]);
 
   // 4. Xử lý dữ liệu hội tụ cho biểu đồ
   const chartData = useMemo(() => {
@@ -186,53 +125,23 @@ export const MonitoringPage: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
-      {/* THANH CHỌN KHU VỰC */}
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="flex-1 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-3">
-          <MapPin className="text-slate-400" size={20} />
-          <select
-            className="w-full bg-transparent font-semibold text-slate-700 outline-none"
-            value={selectedZone}
-            onChange={(e) => {
-              setSelectedZone(e.target.value);
-              setSelectedPond('');
-            }}
-          >
-            <option value="">-- Chọn Vùng Nuôi --</option>
-            {dbZones.map((z) => (
-              <option key={z.id} value={z.id}>
-                {z.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex-1 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-3">
-          <Fish className="text-slate-400" size={20} />
-          <select
-            className="w-full bg-transparent font-semibold text-slate-700 outline-none"
-            disabled={!selectedZone}
-            value={selectedPond}
-            onChange={(e) => setSelectedPond(e.target.value)}
-          >
-            <option value="">-- Chọn Ao Nuôi --</option>
-            {dbPonds.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* CASCADING ZONE > POND SELECTOR */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <h3 className="text-slate-900 text-lg font-bold mb-4">Giám Sát Thực Tế</h3>
+        <ZonePondSelector
+          onPondSelect={(pondId) => setSelectedPond(pondId)}
+          initialPondId={urlPondId}
+          initialZoneId={urlZoneId}
+          className="w-full"
+        />
       </div>
 
       {!selectedPond ? (
-        /* TRẠNG THÁI TRỐNG */
+        /* TRẠNG THÁI CHƯA CHỌN AO */
         <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border-2 border-dashed border-slate-200 text-slate-400">
           <Activity size={64} className="mb-4 opacity-20" />
-          <h3 className="text-xl font-bold text-slate-500">
-            Hệ thống giám sát thực tế
-          </h3>
-          <p>Vui lòng chọn Vùng và Ao để kết nối dữ liệu từ thiết bị.</p>
+          <h3 className="text-xl font-bold text-slate-500">Chưa chọn ao nuôi</h3>
+          <p className="mt-1 text-sm">Vui lòng chọn <strong>Vùng nuôi</strong> rồi chọn <strong>Ao nuôi</strong> để kết nối dữ liệu từ thiết bị.</p>
         </div>
       ) : (
         /* TRẠNG THÁI CÓ DỮ LIỆU */
