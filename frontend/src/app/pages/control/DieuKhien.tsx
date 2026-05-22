@@ -32,7 +32,8 @@ import {
   type DeviceSchedule,
   type SendCommandResult,
 } from "../../services/deviceService";
-import * as sensorService from "../../services/sensorService";
+import * as zoneService from "../../services/zoneService";
+import type { CustomScheduleActivity } from "./LapLich";
 
 // ===== CONSTANTS & CONFIG =====
 
@@ -88,7 +89,7 @@ interface ScheduleTemplate {
   label: string;
   deviceType: Device["type"];
   onTime: string;
-  offTime: string;
+  offTime?: string;
   onLevel: number;
   note: string;
 }
@@ -194,6 +195,9 @@ const getNextDateTimeRange = (startTime: string, endTime: string) => {
 
   return toDateTimeLocalValue(endDateTime);
 };
+
+const getDefaultCustomScheduleAt = () =>
+  toDateTimeLocalValue(new Date(Date.now() + 10 * 60 * 1000));
 
 const getActionLabelByType = (
   deviceType: string | undefined,
@@ -612,9 +616,30 @@ export const DieuKhien: React.FC = () => {
   const [selectedLivestockType, setSelectedLivestockType] = useState<string>(
     LIVESTOCK_TYPES[0].value,
   );
+  const [livestockTypeOptions, setLivestockTypeOptions] =
+    useState(LIVESTOCK_TYPES);
   const [scheduleLevel, setScheduleLevel] = useState<number>(1);
   const [scheduleAt, setScheduleAt] = useState<string>("");
   const [scheduleNote, setScheduleNote] = useState<string>("");
+  const [scheduleTemplates, setScheduleTemplates] = useState<
+    ScheduleTemplate[]
+  >(() => [...SCHEDULE_TEMPLATES]);
+  const [customActivities, setCustomActivities] = useState<
+    CustomScheduleActivity[]
+  >([
+    {
+      id: "activity-1",
+      deviceId: "",
+      targetLevel: 1,
+      scheduleAt: getDefaultCustomScheduleAt(),
+    },
+    {
+      id: "activity-2",
+      deviceId: "",
+      targetLevel: 1,
+      scheduleAt: getDefaultCustomScheduleAt(),
+    },
+  ]);
 
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
@@ -644,9 +669,21 @@ export const DieuKhien: React.FC = () => {
     const fetchInitialData = async () => {
       // Hàm getAllDevices giờ đã tự động map data chuẩn rồi
       const updatedDevices = await getAllDevices();
-      const filtered = updatedDevices.filter((device: any) =>
-        ALLOWED_DEVICE_TYPES.includes(device.type),
-      );
+      const filtered: Device[] = updatedDevices
+        .filter((device: any) => ALLOWED_DEVICE_TYPES.includes(device.type))
+        .map((device: any) => ({
+          id: device.id,
+          name: device.name,
+          type: device.type,
+          feedKey: device.feedKey || device.feed_key || "",
+          isActive: device.isActive,
+          level: device.level,
+          isOnline: device.isOnline,
+          mode: device.mode,
+          lastUpdated: device.lastUpdated,
+          zone_id: device.zone_id ?? null,
+          pond_id: device.pond_id ?? null,
+        }));
 
       // Only update devices state if there are actual changes
       setDevices((prevDevices) => {
@@ -682,7 +719,7 @@ export const DieuKhien: React.FC = () => {
   useEffect(() => {
     const fetchZones = async () => {
       try {
-        const zs = await sensorService.getZones();
+        const zs = await zoneService.getZones();
         setZones(zs || []);
       } catch (e) {
         console.error("Không lấy được danh sách ao/zones:", e);
@@ -707,13 +744,21 @@ export const DieuKhien: React.FC = () => {
 
     const fetchPonds = async () => {
       setLoadingPonds(true);
-      const data = await sensorService.getPondsByZone(selectedZoneId);
+      const data = await zoneService.getPondsByZone(selectedZoneId);
       setPonds(data);
       setLoadingPonds(false);
     };
 
     fetchPonds();
   }, [selectedZoneId]);
+
+  useEffect(() => {
+    if (selectedZoneId && !loadingPonds) {
+      if (selectedPondId && !ponds.some((pond) => pond.id === selectedPondId)) {
+        setSelectedPondId("");
+      }
+    }
+  }, [loadingPonds, ponds, selectedPondId, selectedZoneId]);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
@@ -745,6 +790,10 @@ export const DieuKhien: React.FC = () => {
 
   const filteredDevices = devices.filter((device) => {
     if (!ALLOWED_DEVICE_TYPES.includes(device.type)) return false;
+    if (selectedZoneId) {
+      if (!device.pond_id) return false;
+      if (!ponds.some((pond) => pond.id === device.pond_id)) return false;
+    }
     if (selectedPondId && device.pond_id !== selectedPondId) return false;
     if (filterType !== "all" && device.type !== filterType) return false;
     if (searchQuery) {
@@ -753,24 +802,31 @@ export const DieuKhien: React.FC = () => {
     return true;
   });
 
+  useEffect(() => {
+    if (filteredDevices.length === 0) {
+      if (selectedScheduleDeviceId) {
+        setSelectedScheduleDeviceId("");
+      }
+      return;
+    }
+
+    if (
+      selectedScheduleDeviceId &&
+      filteredDevices.some((device) => device.id === selectedScheduleDeviceId)
+    ) {
+      return;
+    }
+
+    setSelectedScheduleDeviceId(filteredDevices[0].id);
+  }, [filteredDevices, selectedScheduleDeviceId]);
+
   const selectedScheduleDevice = devices.find(
     (device) => device.id === selectedScheduleDeviceId,
   );
 
   const selectedScheduleDeviceType = selectedScheduleDevice?.type;
 
-  const scheduleActionOptions =
-    selectedScheduleDeviceType === "light"
-      ? LIGHT_LEVELS.map((level) => ({
-          value: level,
-          label: level === 0 ? "Tắt đèn" : `Bật đèn mức ${level}`,
-        }))
-      : [
-          { value: 1, label: "Bật thiết bị" },
-          { value: 0, label: "Tắt thiết bị" },
-        ];
-
-  const templatesByLivestock = SCHEDULE_TEMPLATES.filter(
+  const templatesByLivestock = scheduleTemplates.filter(
     (template) => template.livestockType === selectedLivestockType,
   );
 
@@ -872,8 +928,119 @@ export const DieuKhien: React.FC = () => {
     }
   }, [selectedScheduleDeviceType, scheduleLevel]);
 
+  useEffect(() => {
+    if (devices.length === 0) return;
+
+    setCustomActivities((prev) =>
+      prev.map((activity, index) => {
+        const currentDevice = devices.find(
+          (device) => device.id === activity.deviceId,
+        );
+
+        if (currentDevice) {
+          return {
+            ...activity,
+            targetLevel:
+              currentDevice.type === "light"
+                ? activity.targetLevel
+                : activity.targetLevel > 0
+                  ? 1
+                  : 0,
+            scheduleAt: activity.scheduleAt || getDefaultCustomScheduleAt(),
+          };
+        }
+
+        const fallbackDevice = devices[index] ?? devices[0];
+        if (!fallbackDevice) return activity;
+
+        return {
+          ...activity,
+          deviceId: fallbackDevice.id,
+          targetLevel: fallbackDevice.type === "light" ? 4 : 1,
+          scheduleAt: activity.scheduleAt || getDefaultCustomScheduleAt(),
+        };
+      }),
+    );
+  }, [devices]);
+
+  const handleSaveCustomAsTemplate = useCallback(() => {
+    const templateName = window.prompt("Nhập tên mẫu mới");
+    const trimmedTemplateName = templateName?.trim() ?? "";
+    const validActivities = customActivities.filter(
+      (activity) => activity.deviceId && activity.scheduleAt,
+    );
+
+    if (validActivities.length === 0) {
+      alert("Vui lòng chọn ít nhất một hoạt động để lưu làm mẫu");
+      return;
+    }
+
+    if (!trimmedTemplateName) {
+      alert("Vui lòng nhập tên mẫu mới");
+      return;
+    }
+
+    const customLivestockType = `custom-${Date.now()}`;
+    const savedTemplates: ScheduleTemplate[] = validActivities.map(
+      (activity, index) => {
+        const device = devices.find((item) => item.id === activity.deviceId);
+        const timeValue =
+          activity.scheduleAt.split("T")[1]?.slice(0, 5) ?? "00:00";
+
+        return {
+          id: `${customLivestockType}-${activity.id}`,
+          livestockType: customLivestockType,
+          label: `${trimmedTemplateName}${validActivities.length > 1 ? ` - ${index + 1}` : ""}`,
+          deviceType: device?.type ?? "pump",
+          onTime: timeValue,
+          onLevel: activity.targetLevel,
+          note: `${device?.name || "Thiết bị"} - ${getActionLabelByType(
+            device?.type,
+            activity.targetLevel,
+          )}`,
+        };
+      },
+    );
+
+    setScheduleTemplates((prev) => [...savedTemplates, ...prev]);
+
+    setLivestockTypeOptions((prev) => {
+      if (prev.some((item) => item.value === customLivestockType)) {
+        return prev;
+      }
+
+      return [
+        ...prev,
+        { value: customLivestockType, label: trimmedTemplateName },
+      ];
+    });
+
+    setSelectedLivestockType(customLivestockType);
+    setScheduleMode("template");
+    alert(
+      `Đã lưu ${savedTemplates.length} hoạt động thành mẫu cho mục theo mẫu.`,
+    );
+  }, [customActivities, devices, getActionLabelByType]);
+
+  const handleDeleteCustomTemplate = useCallback((livestockType: string) => {
+    const confirmed = window.confirm("Xóa mẫu này khỏi mục theo mẫu?");
+    if (!confirmed) return;
+
+    setScheduleTemplates((prev) =>
+      prev.filter((template) => template.livestockType !== livestockType),
+    );
+
+    setLivestockTypeOptions((prev) =>
+      prev.filter((option) => option.value !== livestockType),
+    );
+
+    setSelectedLivestockType((current) =>
+      current === livestockType ? LIVESTOCK_TYPES[0].value : current,
+    );
+  }, []);
+
   const handleApplyLivestockTemplates = async () => {
-    const templates = SCHEDULE_TEMPLATES.filter(
+    const templates = scheduleTemplates.filter(
       (template) => template.livestockType === selectedLivestockType,
     );
 
@@ -889,7 +1056,7 @@ export const DieuKhien: React.FC = () => {
 
     if (selectedZoneIds.length > 0) {
       targetDevices = targetDevices.filter((d) =>
-        selectedZoneIds.includes(d.zone_id),
+        selectedZoneIds.includes(d.zone_id ?? ""),
       );
     }
 
@@ -923,28 +1090,37 @@ export const DieuKhien: React.FC = () => {
       datesToApply.push(new Date().toISOString().slice(0, 10));
     }
 
-    const results = await Promise.all(
-      targetDevices.flatMap((device) => {
-        const matchedTemplate = templates.find(
-          (template) => template.deviceType === device.type,
-        );
+    const results: Array<{
+      success: boolean;
+      deviceName: string;
+      reason?: string;
+    }> = [];
 
-        if (!matchedTemplate) {
-          return [
-            {
-              success: false,
-              deviceName: device.name,
-              reason: "Không có mẫu khớp loại thiết bị",
-            },
-          ];
-        }
+    const tasks: Promise<{
+      success: boolean;
+      deviceName: string;
+      reason?: string;
+    }>[] = [];
 
-        // Create schedules for each device on each date
-        return datesToApply.flatMap((dateStr) => {
+    for (const device of targetDevices) {
+      const matchedTemplates = templates.filter(
+        (template) => template.deviceType === device.type,
+      );
+
+      if (matchedTemplates.length === 0) {
+        results.push({
+          success: false,
+          deviceName: device.name,
+          reason: "Không có mẫu khớp loại thiết bị",
+        });
+        continue;
+      }
+
+      for (const matchedTemplate of matchedTemplates) {
+        for (const dateStr of datesToApply) {
           const onTime = `${dateStr}T${matchedTemplate.onTime}:00`;
-          const offTime = `${dateStr}T${matchedTemplate.offTime}:00`;
 
-          return [
+          tasks.push(
             createDeviceSchedule({
               actuator_id: device.id,
               target_level: matchedTemplate.onLevel,
@@ -955,20 +1131,28 @@ export const DieuKhien: React.FC = () => {
               deviceName: device.name,
               reason: onResult.error,
             })),
-            createDeviceSchedule({
-              actuator_id: device.id,
-              target_level: 0,
-              schedule_at: new Date(offTime).toISOString(),
-              note: `${matchedTemplate.note} - Tắt (${device.name})`,
-            }).then((offResult) => ({
-              success: offResult.success,
-              deviceName: device.name,
-              reason: offResult.error,
-            })),
-          ];
-        });
-      }),
-    );
+          );
+
+          if (matchedTemplate.offTime) {
+            const offTime = `${dateStr}T${matchedTemplate.offTime}:00`;
+            tasks.push(
+              createDeviceSchedule({
+                actuator_id: device.id,
+                target_level: 0,
+                schedule_at: new Date(offTime).toISOString(),
+                note: `${matchedTemplate.note} - Tắt (${device.name})`,
+              }).then((offResult) => ({
+                success: offResult.success,
+                deviceName: device.name,
+                reason: offResult.error,
+              })),
+            );
+          }
+        }
+      }
+    }
+
+    results.push(...(await Promise.all(tasks)));
 
     setIsTemplateSubmitting(false);
 
@@ -1002,6 +1186,52 @@ export const DieuKhien: React.FC = () => {
   };
 
   const handleCreateSchedule = async () => {
+    if (scheduleMode === "custom") {
+      const selectedActivities = customActivities.filter(
+        (activity) => activity.deviceId && activity.scheduleAt,
+      );
+
+      if (selectedActivities.length === 0) {
+        alert("Vui lòng chọn ít nhất một hoạt động và thời gian áp dụng");
+        return;
+      }
+
+      setIsScheduleSubmitting(true);
+
+      const results = await Promise.all(
+        selectedActivities.map((activity) =>
+          createDeviceSchedule({
+            actuator_id: activity.deviceId,
+            target_level: activity.targetLevel,
+            schedule_at: new Date(activity.scheduleAt).toISOString(),
+            note: scheduleNote || undefined,
+          })
+            .then((r) => ({ success: r.success, deviceId: activity.deviceId }))
+            .catch((e) => ({
+              success: false,
+              error: e?.message || String(e),
+              deviceId: activity.deviceId,
+            })),
+        ),
+      );
+
+      setIsScheduleSubmitting(false);
+
+      const failed = results.filter((r: { success: boolean }) => !r.success);
+      if (failed.length > 0) {
+        alert(
+          `Một số lịch tạo thất bại: ${failed
+            .map((f: { deviceId?: string }) => f.deviceId)
+            .join(", ")}`,
+        );
+      }
+
+      const dbSchedules = await getDeviceSchedules();
+      setSchedules(dbSchedules);
+      setScheduleNote("");
+      return;
+    }
+
     if (!scheduleAt) {
       alert("Vui lòng chọn thời gian lập lịch");
       return;
@@ -1014,7 +1244,7 @@ export const DieuKhien: React.FC = () => {
     let targetDevices = [] as any[];
     if (selectedZoneIds.length > 0) {
       targetDevices = devices.filter((d) =>
-        selectedZoneIds.includes(d.zone_id),
+        selectedZoneIds.includes(d.zone_id ?? ""),
       );
     } else if (selectedScheduleDeviceId) {
       const match = devices.find((d) => d.id === selectedScheduleDeviceId);
@@ -1089,7 +1319,6 @@ export const DieuKhien: React.FC = () => {
     const dbSchedules = await getDeviceSchedules();
     setSchedules(dbSchedules);
     setScheduleNote("");
-    setSelectedDates([]);
     setSelectedZoneIds([]);
   };
 
@@ -1210,7 +1439,7 @@ export const DieuKhien: React.FC = () => {
       </div>
 
       <LapLich
-        livestockTypes={LIVESTOCK_TYPES}
+        livestockTypes={livestockTypeOptions}
         selectedLivestockType={selectedLivestockType}
         onSelectedLivestockTypeChange={setSelectedLivestockType}
         templatesByLivestock={templatesByLivestock}
@@ -1219,15 +1448,16 @@ export const DieuKhien: React.FC = () => {
         devices={devices}
         scheduleAt={scheduleAt}
         onScheduleAtChange={setScheduleAt}
-        scheduleActionOptions={scheduleActionOptions}
-        scheduleLevel={scheduleLevel}
-        onScheduleLevelChange={setScheduleLevel}
         scheduleNote={scheduleNote}
         onScheduleNoteChange={setScheduleNote}
         isTemplateSubmitting={isTemplateSubmitting}
         isScheduleSubmitting={isScheduleSubmitting}
         onApplyLivestockTemplates={handleApplyLivestockTemplates}
+        onSaveCustomAsTemplate={handleSaveCustomAsTemplate}
+        onDeleteCustomTemplate={handleDeleteCustomTemplate}
         onCreateSchedule={handleCreateSchedule}
+        customActivities={customActivities}
+        onCustomActivitiesChange={setCustomActivities}
         schedules={schedules}
         onCancelSchedule={handleCancelSchedule}
         deviceTypeLabels={DEVICE_TYPE_LABELS}

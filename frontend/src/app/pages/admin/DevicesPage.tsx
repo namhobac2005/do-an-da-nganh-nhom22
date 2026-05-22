@@ -7,12 +7,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Search, RefreshCw, Zap } from "lucide-react";
 import { useSearchParams } from "react-router";
+import { toast } from "sonner";
 
 import { DeviceTable } from "../../components/admin/DeviceTable";
 import { DeviceFormDialog } from "../../components/admin/DeviceFormDialog";
 import * as deviceService from "../../services/deviceService";
 import * as zoneService from "../../services/zoneService";
-import * as sensorService from "../../services/sensorService";
 import type {
   Device,
   CreateDeviceDto,
@@ -84,7 +84,7 @@ export const DevicesPage: React.FC = () => {
 
   useEffect(() => {
     const fetchFilterZones = async () => {
-      const data = await sensorService.getZones();
+      const data = await zoneService.getZones();
       setFilterZones(data);
     };
     fetchFilterZones();
@@ -99,13 +99,24 @@ export const DevicesPage: React.FC = () => {
 
     const fetchFilterPonds = async () => {
       setLoadingPonds(true);
-      const data = await sensorService.getPondsByZone(selectedZoneId);
+      const data = await zoneService.getPondsByZone(selectedZoneId);
       setFilterPonds(data);
       setLoadingPonds(false);
     };
 
     fetchFilterPonds();
   }, [selectedZoneId]);
+
+  useEffect(() => {
+    if (!selectedZoneId || loadingPonds) return;
+
+    if (
+      selectedPondId &&
+      !filterPonds.some((pond) => pond.id === selectedPondId)
+    ) {
+      setSelectedPondId("");
+    }
+  }, [filterPonds, loadingPonds, selectedPondId, selectedZoneId]);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
@@ -126,13 +137,21 @@ export const DevicesPage: React.FC = () => {
 
   // ===== FILTER =====
   const filtered = devices.filter((d) => {
+    if (selectedZoneId) {
+      if (!d.pond_id) return false;
+      if (!filterPonds.some((pond) => pond.id === d.pond_id)) return false;
+    }
+
     if (selectedPondId && d.pond_id !== selectedPondId) return false;
 
     const normalized = searchQuery.toLowerCase();
+    const feedKey = d.feed_key ?? "";
+    const name = d.name ?? "";
+    const description = d.description ?? "";
     return (
-      d.name.toLowerCase().includes(normalized) ||
-      d.feed_key.toLowerCase().includes(normalized) ||
-      (d.description ?? "").toLowerCase().includes(normalized)
+      name.toLowerCase().includes(normalized) ||
+      feedKey.toLowerCase().includes(normalized) ||
+      description.toLowerCase().includes(normalized)
     );
   });
 
@@ -161,21 +180,23 @@ export const DevicesPage: React.FC = () => {
           setDevices((prev) =>
             prev.map((d) => (d.id === result.data!.id ? result.data! : d)),
           );
+          toast.success("Đã cập nhật thiết bị!");
           return true;
         }
-        alert(result.error || "Cập nhật thiết bị thất bại");
+        toast.error(result.error || "Cập nhật thiết bị thất bại");
         return false;
       } else {
         const result = await deviceService.createDevice(dto as CreateDeviceDto);
         if (result.success && result.data) {
           setDevices((prev) => [result.data!, ...prev]);
+          toast.success("Đã tạo thiết bị!");
           return true;
         }
-        alert(result.error || "Tạo thiết bị thất bại");
+        toast.error(result.error || "Tạo thiết bị thất bại");
         return false;
       }
     } catch (err: any) {
-      alert(`Lỗi: ${err.message}`);
+      toast.error(`Lỗi: ${err.message}`);
       return false;
     }
   };
@@ -191,9 +212,12 @@ export const DevicesPage: React.FC = () => {
       const result = await deviceService.deleteDevice(device.id);
       if (result.success) {
         setDevices((prev) => prev.filter((d) => d.id !== device.id));
+        toast.success("Đã xóa thiết bị!");
+      } else {
+        toast.error(result.error || "Xóa thiết bị thất bại");
       }
     } catch (err: any) {
-      alert(`Lỗi: ${err.message}`);
+      toast.error(`Lỗi: ${err.message}`);
     }
   };
 

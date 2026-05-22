@@ -57,6 +57,7 @@ export const getAllDevices = async () => {
         id: dbDev.id,
         name: dbDev.name || "Thiết bị không tên",
         type: dbDev.type?.toLowerCase() || "pump",
+        feed_key: dbDev.feed_key || "",
         isActive: dbDev.status !== "OFF" && dbDev.status !== 0,
         level: currentLevel,
         isOnline: true, // Mặc định true vì đã lấy được từ DB

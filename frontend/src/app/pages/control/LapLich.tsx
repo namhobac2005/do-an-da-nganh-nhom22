@@ -1,3 +1,4 @@
+import React, { useEffect, useState } from "react";
 import { CalendarClock, Trash2 } from "lucide-react";
 import type { Device } from "./DieuKhien";
 import type { DeviceSchedule } from "../../services/deviceService";
@@ -8,9 +9,16 @@ export interface ScheduleTemplate {
   label: string;
   deviceType: Device["type"];
   onTime: string;
-  offTime: string;
+  offTime?: string;
   onLevel: number;
   note: string;
+}
+
+export interface CustomScheduleActivity {
+  id: string;
+  deviceId: string;
+  targetLevel: number;
+  scheduleAt: string;
 }
 
 interface LapLichProps {
@@ -32,15 +40,16 @@ interface LapLichProps {
   onRepeatDailyChange?: (value: boolean) => void;
   scheduleAt: string;
   onScheduleAtChange: (value: string) => void;
-  scheduleActionOptions: { value: number; label: string }[];
-  scheduleLevel: number;
-  onScheduleLevelChange: (value: number) => void;
   scheduleNote: string;
   onScheduleNoteChange: (value: string) => void;
   isTemplateSubmitting: boolean;
   isScheduleSubmitting: boolean;
   onApplyLivestockTemplates: () => void;
+  onSaveCustomAsTemplate: () => void;
+  onDeleteCustomTemplate?: (livestockType: string) => void;
   onCreateSchedule: () => void;
+  customActivities: CustomScheduleActivity[];
+  onCustomActivitiesChange: (activities: CustomScheduleActivity[]) => void;
   schedules: DeviceSchedule[];
   onCancelSchedule: (scheduleId: string) => void;
   deviceTypeLabels: Record<string, string>;
@@ -69,15 +78,16 @@ export const LapLich: React.FC<LapLichProps> = ({
   devices,
   scheduleAt,
   onScheduleAtChange,
-  scheduleActionOptions,
-  scheduleLevel,
-  onScheduleLevelChange,
   scheduleNote,
   onScheduleNoteChange,
   isTemplateSubmitting,
   isScheduleSubmitting,
   onApplyLivestockTemplates,
+  onSaveCustomAsTemplate,
+  onDeleteCustomTemplate,
   onCreateSchedule,
+  customActivities,
+  onCustomActivitiesChange,
   schedules,
   onCancelSchedule,
   deviceTypeLabels,
@@ -94,6 +104,82 @@ export const LapLich: React.FC<LapLichProps> = ({
   scheduleMode = "template",
   onScheduleModeChange = () => {},
 }) => {
+  const getActionOptionsByType = (deviceType: Device["type"] | undefined) =>
+    deviceType === "light"
+      ? [
+          { value: 0, label: "Tắt đèn" },
+          ...[1, 2, 3, 4].map((level) => ({
+            value: level,
+            label: `Bật đèn mức ${level}`,
+          })),
+        ]
+      : [
+          { value: 0, label: "Tắt thiết bị" },
+          { value: 1, label: "Bật thiết bị" },
+        ];
+
+  const toDateTimeLocalValue = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const createDefaultActivity = (): CustomScheduleActivity => ({
+    id: `activity-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    deviceId: devices[0]?.id ?? "",
+    targetLevel: devices[0]?.type === "light" ? 4 : 1,
+    scheduleAt,
+  });
+
+  const updateCustomActivity = (
+    activityId: string,
+    patch: Partial<CustomScheduleActivity>,
+  ) => {
+    onCustomActivitiesChange(
+      customActivities.map((activity) =>
+        activity.id === activityId ? { ...activity, ...patch } : activity,
+      ),
+    );
+  };
+
+  useEffect(() => {
+    if (customActivities.length === 0 || devices.length === 0) {
+      return;
+    }
+
+    const nextActivities = customActivities.map((activity, index) => {
+      const currentDevice = devices.find(
+        (device) => device.id === activity.deviceId,
+      );
+      if (currentDevice) {
+        return activity;
+      }
+
+      const fallbackDevice = devices[index] ?? devices[0];
+      if (!fallbackDevice) {
+        return activity;
+      }
+
+      const defaultLevel = fallbackDevice.type === "light" ? 4 : 1;
+      return {
+        ...activity,
+        deviceId: fallbackDevice.id,
+        targetLevel: defaultLevel,
+      };
+    });
+
+    const hasChanges = nextActivities.some(
+      (activity, index) => activity !== customActivities[index],
+    );
+
+    if (hasChanges) {
+      onCustomActivitiesChange(nextActivities);
+    }
+  }, [customActivities, devices, onCustomActivitiesChange]);
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
@@ -160,9 +246,23 @@ export const LapLich: React.FC<LapLichProps> = ({
                       )?.label
                     }
                   </p>
-                  <p className="text-gray-500" style={{ fontSize: "11px" }}>
-                    Thiết bị nào làm gì
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-gray-500" style={{ fontSize: "11px" }}>
+                      Thiết bị nào làm gì
+                    </p>
+                    {selectedLivestockType.startsWith("custom-") &&
+                      onDeleteCustomTemplate && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onDeleteCustomTemplate(selectedLivestockType)
+                          }
+                          className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100"
+                        >
+                          Xóa mẫu
+                        </button>
+                      )}
+                  </div>
                 </div>
 
                 {templatesByLivestock.length > 0 ? (
@@ -194,12 +294,14 @@ export const LapLich: React.FC<LapLichProps> = ({
                             >
                               Bật {template.onTime}
                             </p>
-                            <p
-                              className="text-gray-500"
-                              style={{ fontSize: "11px" }}
-                            >
-                              Tắt {template.offTime}
-                            </p>
+                            {template.offTime && (
+                              <p
+                                className="text-gray-500"
+                                style={{ fontSize: "11px" }}
+                              >
+                                Tắt {template.offTime}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -211,18 +313,6 @@ export const LapLich: React.FC<LapLichProps> = ({
                   </p>
                 )}
               </div>
-
-              <button
-                type="button"
-                onClick={onApplyLivestockTemplates}
-                disabled={isTemplateSubmitting || devices.length === 0}
-                className="md:col-span-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60"
-                style={{ fontSize: "13px", fontWeight: 600 }}
-              >
-                {isTemplateSubmitting
-                  ? "Đang áp dụng lịch mẫu..."
-                  : "Áp dụng lịch bật/tắt mẫu cho toàn bộ thiết bị theo loại nuôi"}
-              </button>
 
               <div className="md:col-span-2">
                 <label
@@ -302,121 +392,146 @@ export const LapLich: React.FC<LapLichProps> = ({
 
           {scheduleMode === "custom" && (
             <>
-              <select
-                value={selectedScheduleDeviceId}
-                onChange={(e) =>
-                  onSelectedScheduleDeviceIdChange(e.target.value)
-                }
-                className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-emerald-400"
-                style={{ fontSize: "13px" }}
-              >
-                {devices.map((device) => (
-                  <option key={device.id} value={device.id}>
-                    {device.name}
-                  </option>
-                ))}
-              </select>
+              <div className="md:col-span-2 flex items-center justify-between gap-3">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onCustomActivitiesChange([
+                        ...customActivities,
+                        createDefaultActivity(),
+                      ])
+                    }
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700"
+                  >
+                    Thêm hoạt động
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onSaveCustomAsTemplate}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700"
+                  >
+                    Lưu làm mẫu
+                  </button>
+                </div>
+              </div>
+
+              {customActivities.map((activity, index) => {
+                const selectedDevice = devices.find(
+                  (device) => device.id === activity.deviceId,
+                );
+                const actionOptions = getActionOptionsByType(
+                  selectedDevice?.type,
+                );
+
+                return (
+                  <div
+                    key={activity.id}
+                    className="md:col-span-2 rounded-xl border border-gray-100 bg-white p-4 space-y-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p
+                        className="text-gray-900"
+                        style={{ fontSize: "13px", fontWeight: 700 }}
+                      >
+                        Hoạt động {index + 1}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onCustomActivitiesChange(
+                            customActivities.filter(
+                              (item) => item.id !== activity.id,
+                            ),
+                          )
+                        }
+                        className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100"
+                        disabled={customActivities.length <= 1}
+                      >
+                        Xóa
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <input
+                        type="datetime-local"
+                        value={activity.scheduleAt}
+                        onChange={(e) =>
+                          updateCustomActivity(activity.id, {
+                            scheduleAt: e.target.value,
+                          })
+                        }
+                        className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-emerald-400"
+                        style={{ fontSize: "13px" }}
+                      />
+
+                      <select
+                        value={activity.deviceId}
+                        onChange={(e) => {
+                          const nextDevice = devices.find(
+                            (device) => device.id === e.target.value,
+                          );
+                          updateCustomActivity(activity.id, {
+                            deviceId: e.target.value,
+                            targetLevel: nextDevice?.type === "light" ? 4 : 1,
+                          });
+                        }}
+                        className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-emerald-400"
+                        style={{ fontSize: "13px" }}
+                      >
+                        <option value="">Chọn thiết bị</option>
+                        {devices.map((device) => (
+                          <option key={device.id} value={device.id}>
+                            {device.name} (
+                            {deviceTypeLabels[device.type] ?? device.type})
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={activity.targetLevel}
+                        onChange={(e) =>
+                          updateCustomActivity(activity.id, {
+                            targetLevel: Number(e.target.value),
+                          })
+                        }
+                        className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-emerald-400"
+                        style={{ fontSize: "13px" }}
+                        disabled={!selectedDevice}
+                      >
+                        {actionOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <p className="text-gray-500" style={{ fontSize: "11px" }}>
+                      {selectedDevice
+                        ? `${selectedDevice.name} - ${getActionLabelByType(selectedDevice.type, activity.targetLevel)}`
+                        : "Chọn thiết bị để cấu hình hành động"}
+                    </p>
+                  </div>
+                );
+              })}
 
               <div className="md:col-span-2">
                 <label
                   className="text-gray-700"
                   style={{ fontSize: 13, fontWeight: 600 }}
                 >
-                  Áp dụng cho ao:
+                  Ghi chú chung:
                 </label>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  {zones.map((z) => (
-                    <label
-                      key={z.id}
-                      className="flex items-center gap-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedZoneIds.includes(z.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            onSelectedZoneIdsChange([...selectedZoneIds, z.id]);
-                          } else {
-                            onSelectedZoneIdsChange(
-                              selectedZoneIds.filter((id) => id !== z.id),
-                            );
-                          }
-                        }}
-                      />
-                      {z.name}
-                    </label>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSelectedZoneIdsChange(zones.map((z) => z.id))
-                  }
-                  className="mt-2 text-xs px-2 py-1 bg-gray-200 rounded hover:bg-gray-300"
-                >
-                  Chọn tất cả
-                </button>
+                <input
+                  type="text"
+                  value={scheduleNote}
+                  onChange={(e) => onScheduleNoteChange(e.target.value)}
+                  placeholder="Ghi chú lịch (tuỳ chọn)"
+                  className="mt-2 w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-emerald-400"
+                  style={{ fontSize: "13px" }}
+                />
               </div>
-
-              <div className="md:col-span-2">
-                <label className="text-gray-700" style={{ fontSize: 13 }}>
-                  Ngày bắt đầu / kết thúc (range):
-                </label>
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => onStartDateChange(e.target.value)}
-                    className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-emerald-400"
-                    style={{ fontSize: "13px" }}
-                  />
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => onEndDateChange(e.target.value)}
-                    className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-emerald-400"
-                    style={{ fontSize: "13px" }}
-                  />
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={repeatDaily}
-                      onChange={(e) => onRepeatDailyChange(e.target.checked)}
-                    />
-                    Lặp hàng ngày
-                  </label>
-                </div>
-              </div>
-
-              <input
-                type="datetime-local"
-                value={scheduleAt}
-                onChange={(e) => onScheduleAtChange(e.target.value)}
-                className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-emerald-400"
-                style={{ fontSize: "13px" }}
-              />
-
-              <select
-                value={scheduleLevel}
-                onChange={(e) => onScheduleLevelChange(Number(e.target.value))}
-                className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-emerald-400"
-                style={{ fontSize: "13px" }}
-              >
-                {scheduleActionOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                type="text"
-                value={scheduleNote}
-                onChange={(e) => onScheduleNoteChange(e.target.value)}
-                placeholder="Ghi chú lịch (tuỳ chọn)"
-                className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-emerald-400"
-                style={{ fontSize: "13px" }}
-              />
             </>
           )}
         </div>
@@ -429,11 +544,6 @@ export const LapLich: React.FC<LapLichProps> = ({
         >
           {isScheduleSubmitting ? "Đang lưu lịch..." : "Tạo lịch"}
         </button>
-        {scheduleMode === "template" && (
-          <p className="text-gray-500" style={{ fontSize: "12px" }}>
-            Dùng nút áp dụng để tạo cặp lịch bật/tắt hàng loạt theo loại nuôi.
-          </p>
-        )}
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
