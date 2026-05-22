@@ -30,6 +30,7 @@ export const ActivityLogsPage: React.FC = () => {
     "created_at",
   );
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [selectedActor, setSelectedActor] = useState<string>("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -168,7 +169,7 @@ export const ActivityLogsPage: React.FC = () => {
         </div>
 
         {/* Third row: Sort controls */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <button
             onClick={() => toggleSort("created_at")}
             className={`flex items-center gap-2 px-3.5 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
@@ -186,22 +187,31 @@ export const ActivityLogsPage: React.FC = () => {
             )}
           </button>
 
-          <button
-            onClick={() => toggleSort("actor_email")}
-            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-              sortBy === "actor_email"
-                ? "bg-blue-50 border-blue-200 text-blue-700"
-                : "border-gray-200 text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            <ArrowUpDown size={14} />
-            Người thực hiện
-            {sortBy === "actor_email" && (
-              <span className="text-xs ml-1">
-                {sortDirection === "asc" ? "↑" : "↓"}
-              </span>
-            )}
-          </button>
+          {/* Actor select filter (replaces sort-by-actor) */}
+          <div className="flex items-center gap-2">
+            <label className="text-gray-600 text-xs font-semibold">
+              Người thực hiện
+            </label>
+            <select
+              value={selectedActor}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSelectedActor(v);
+                // Use the existing searchTerm to filter by actor email (backend searches actor_email)
+                setSearchTerm(v);
+              }}
+              className="px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white"
+            >
+              <option value="">Tất cả</option>
+              {Array.from(
+                new Set(logs.map((l) => l.actor_email).filter(Boolean)),
+              ).map((email) => (
+                <option key={email} value={email as string}>
+                  {email}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 

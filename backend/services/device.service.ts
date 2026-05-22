@@ -63,9 +63,7 @@ const aioHeaders = () => ({
  * Lấy danh sách thiết bị từ bảng actuators
  */
 export const getAllDevices = async () => {
-  const { data, error } = await supabase
-    .from("actuators")
-    .select("*");
+  const { data, error } = await supabase.from("actuators").select("*");
   if (error) throw new Error(error.message);
   return data || [];
 };
@@ -100,7 +98,7 @@ export const controlDevice = async (
   // 1. Lấy thông tin từ bảng 'actuators' và kiểm tra zone trước khi điều khiển
   const device = await ensureDeviceAccess(deviceId, userId, role);
 
-  const feedKey = device.type.toLowerCase();
+  const feedKey = device.feed_key || device.type.toLowerCase();
 
   // 2. Gửi lệnh lên Adafruit IO (Giữ nguyên logic cũ)
   try {
@@ -342,6 +340,16 @@ export const createDevice = async (
     }
   }
 
+  const { data: existingFeedKey } = await supabase
+    .from("actuators")
+    .select("id")
+    .eq("feed_key", feedKey)
+    .limit(1);
+
+  if (existingFeedKey && existingFeedKey.length > 0) {
+    throw new Error("Feed Key đã tồn tại. Vui lòng nhập mã khác.");
+  }
+
   // Attempt to create feed on Adafruit IO (best-effort).
   if (AIO_USERNAME && AIO_KEY && !aioFeedCreationDisabled) {
     try {
@@ -403,7 +411,12 @@ export const createDevice = async (
     .select("*")
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error("Feed Key đã tồn tại. Vui lòng nhập mã khác.");
+    }
+    throw new Error(error.message);
+  }
   return data;
 };
 

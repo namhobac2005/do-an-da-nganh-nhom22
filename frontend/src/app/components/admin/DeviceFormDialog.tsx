@@ -7,7 +7,7 @@
  *  - Dynamic pond selection based on zone
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X, Loader2 } from "lucide-react";
@@ -16,8 +16,8 @@ import type {
   CreateDeviceDto,
   UpdateDeviceDto,
 } from "../../services/deviceService";
+import * as zoneService from "../../services/zoneService";
 import type { Zone } from "../../types/user.types";
-import * as sensorService from "../../services/sensorService";
 
 // ===== TYPES =====
 
@@ -58,6 +58,20 @@ const MODE_OPTIONS = [
   { value: "auto", label: "Tự động" },
 ] as const;
 
+const slugifyFeedKey = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 48);
+
+const buildSuggestedFeedKey = (name: string, type: FormValues["type"]) => {
+  const baseName = slugifyFeedKey(name);
+  const baseType = slugifyFeedKey(type);
+  return [baseType, baseName].filter(Boolean).join("_");
+};
+
 // ===== MAIN DIALOG =====
 
 export const DeviceFormDialog: React.FC<DeviceFormDialogProps> = ({
@@ -68,15 +82,20 @@ export const DeviceFormDialog: React.FC<DeviceFormDialogProps> = ({
   zones,
 }) => {
   const isEdit = !!editDevice;
-  const [selectedZone, setSelectedZone] = useState<string>("");
+  const safeZones = Array.isArray(zones) ? zones : [];
   const [ponds, setPonds] = useState<Pond[]>([]);
   const [isLoadingPonds, setIsLoadingPonds] = useState(false);
+  const feedKeyAutoValueRef = useRef("");
+  const feedKeyManuallyEditedRef = useRef(false);
+  const previousZoneIdRef = useRef("");
 
   const {
     register,
     handleSubmit,
     watch,
     reset,
+    setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     defaultValues: {
@@ -92,18 +111,30 @@ export const DeviceFormDialog: React.FC<DeviceFormDialogProps> = ({
 
   // Watch zone_id to load ponds
   const watchedZoneId = watch("zone_id");
+  const watchedName = watch("name");
+  const watchedType = watch("type");
 
   // Fetch ponds when zone changes
   useEffect(() => {
     const fetchPonds = async () => {
       if (!watchedZoneId) {
         setPonds([]);
+        setValue("pond_id", "", { shouldDirty: false, shouldValidate: true });
+        previousZoneIdRef.current = "";
         return;
       }
 
+      if (
+        previousZoneIdRef.current &&
+        previousZoneIdRef.current !== watchedZoneId
+      ) {
+        setValue("pond_id", "", { shouldDirty: true, shouldValidate: true });
+      }
+      previousZoneIdRef.current = watchedZoneId;
+
       setIsLoadingPonds(true);
       try {
-        const pondData = await sensorService.getPondsByZone(watchedZoneId);
+        const pondData = await zoneService.getPondsByZone(watchedZoneId);
         setPonds(pondData);
       } catch (err) {
         console.error("Failed to fetch ponds:", err);
@@ -127,7 +158,33 @@ export const DeviceFormDialog: React.FC<DeviceFormDialogProps> = ({
       mode: (editDevice?.mode as any) ?? "manual",
       description: editDevice?.description ?? "",
     });
+    feedKeyAutoValueRef.current = editDevice?.feed_key ?? "";
+    feedKeyManuallyEditedRef.current = !!editDevice?.feed_key;
   }, [open, editDevice, reset]);
+
+  useEffect(() => {
+    if (isEdit) return;
+
+    const suggestedFeedKey = buildSuggestedFeedKey(watchedName, watchedType);
+    if (!suggestedFeedKey) return;
+
+    const currentFeedKey = getValues("feed_key").trim();
+    const shouldAutoFill =
+      !feedKeyManuallyEditedRef.current ||
+      !currentFeedKey ||
+      currentFeedKey === feedKeyAutoValueRef.current;
+
+    if (!shouldAutoFill || currentFeedKey === suggestedFeedKey) {
+      feedKeyAutoValueRef.current = suggestedFeedKey;
+      return;
+    }
+
+    setValue("feed_key", suggestedFeedKey, {
+      shouldDirty: false,
+      shouldValidate: true,
+    });
+    feedKeyAutoValueRef.current = suggestedFeedKey;
+  }, [getValues, isEdit, setValue, watchedName, watchedType]);
 
   const onValid = async (values: FormValues) => {
     const dto = {
@@ -246,8 +303,11 @@ export const DeviceFormDialog: React.FC<DeviceFormDialogProps> = ({
               <input
                 id="device-feed-key"
                 type="text"
-                placeholder="VD: pump_1 — để trống để tự tạo"
+                placeholder="VD: pump_1"
                 {...register("feed_key", {
+                  onChange: () => {
+                    feedKeyManuallyEditedRef.current = true;
+                  },
                   pattern: {
                     value: /^[a-z0-9_-]+$/,
                     message:
@@ -266,8 +326,8 @@ export const DeviceFormDialog: React.FC<DeviceFormDialogProps> = ({
                 </p>
               )}
               <p className="text-gray-400 text-xs mt-1.5">
-                Mã định danh trên Adafruit IO (ví dụ: pump_1). Nếu để trống, hệ
-                thống sẽ tạo tự động.
+                Mã định danh trên Adafruit IO. Hệ thống sẽ tự điền theo tên
+                thiết bị khi bạn nhập mới, và bạn vẫn có thể sửa tay nếu cần.
               </p>
             </div>
 
@@ -291,7 +351,7 @@ export const DeviceFormDialog: React.FC<DeviceFormDialogProps> = ({
                 } bg-white`}
               >
                 <option value="">-- Chọn khu vực --</option>
-                {zones.map((z) => (
+                {safeZones.map((z) => (
                   <option key={z.id} value={z.id}>
                     {z.name}
                   </option>
