@@ -134,7 +134,6 @@ export const getZonesOverview = async (userId: string) => {
       pond.actuators?.filter((a: any) => a.status === 'active').length || 0;
     const pondActiveDevices = activeSensors + activeActuators;
 
-    // Nếu nhóm Zone này chưa có trong Map thì khởi tạo khung cấu trúc mới
     if (!zoneMap[zone.id]) {
       zoneMap[zone.id] = {
         id: zone.id,
