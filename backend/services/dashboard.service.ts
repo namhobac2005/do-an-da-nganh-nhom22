@@ -15,9 +15,6 @@ const getUserPondIds = async (userId: string): Promise<string[]> => {
 
 // 1. Lấy thông số KPI tổng quan
 export const getDashboardKPIs = async (userId: string) => {
-  console.log('=== DEBUG DASHBOARD ===');
-  console.log('1. Token đang đăng nhập của User ID:', userId);
-
   const pondIds = await getUserPondIds(userId);
   console.log('2. Các Pond tìm thấy cho User này:', pondIds);
 
@@ -102,14 +99,19 @@ export const getZonesOverview = async (userId: string) => {
   const pondIds = await getUserPondIds(userId);
   if (pondIds.length === 0) return [];
 
-  const { data: ponds, error } = await supabase
+  // Lấy danh sách các ao của user kèm theo thông tin chi tiết về Zone của ao đó
+  const { data: pondsData, error } = await supabase
     .from('ponds')
     .select(
       `
       id,
       name,
-      location,
       status,
+      zones!inner (
+        id,
+        name,
+        location
+      ),
       sensors ( status ),
       actuators ( status )
     `,
@@ -118,20 +120,44 @@ export const getZonesOverview = async (userId: string) => {
 
   if (error) throw error;
 
-  return (ponds || []).map((pond: any) => {
+  // Tiến hành gộp dữ liệu các Ao (Ponds) vào nhóm Khu Vực (Zones) tương ứng
+  const zoneMap: Record<string, any> = {};
+
+  (pondsData || []).forEach((pond: any) => {
+    const zone = pond.zones;
+    if (!zone) return;
+
+    // Tính toán số thiết bị đang chạy của ao này
     const activeSensors =
       pond.sensors?.filter((s: any) => s.status === 'active').length || 0;
     const activeActuators =
       pond.actuators?.filter((a: any) => a.status === 'active').length || 0;
+    const pondActiveDevices = activeSensors + activeActuators;
 
-    return {
+    if (!zoneMap[zone.id]) {
+      zoneMap[zone.id] = {
+        id: zone.id,
+        name: zone.name,
+        location: zone.location,
+        totalPonds: 0,
+        activeDevices: 0,
+        activeAlerts: 0,
+        ponds: [], // Mảng chứa danh sách ao chi tiết phục vụ hiển thị lồng
+      };
+    }
+
+    // Tích lũy dữ liệu vào Vùng (Zone) lớn
+    zoneMap[zone.id].totalPonds += 1;
+    zoneMap[zone.id].activeDevices += pondActiveDevices;
+
+    // Đẩy thông tin ao hiện tại vào mảng ponds của Zone
+    zoneMap[zone.id].ponds.push({
       id: pond.id,
       name: pond.name,
-      location: pond.location,
       status: pond.status || 'active',
-      totalPonds: 1,
-      activeDevices: activeSensors + activeActuators,
-      activeAlerts: 0,
-    };
+    });
   });
+
+  // Chuyển đối tượng Map thành mảng để giao diện Frontend map() xử lý
+  return Object.values(zoneMap);
 };
