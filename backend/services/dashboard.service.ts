@@ -12,32 +12,6 @@ const getUserPondIds = async (userId: string): Promise<string[]> => {
     .eq('user_id', userId);
   return data ? data.map((up) => up.pond_id) : [];
 };
-const getUserZoneIds = async (userId: string): Promise<string[]> => {
-  // 1. Lấy tất cả các ao thuộc quyền quản lý của User
-  const { data: userPonds } = await supabase
-    .from('user_ponds')
-    .select('pond_id')
-    .eq('user_id', userId);
-
-  if (!userPonds || userPonds.length === 0) return [];
-
-  const pondIds = userPonds.map((up) => up.pond_id);
-
-  // 2. Tra cứu bảng ponds để lấy ra các zone_id tương ứng của những ao đó
-  const { data: pondsData } = await supabase
-    .from('ponds')
-    .select('zone_id')
-    .in('id', pondIds);
-
-  if (!pondsData) return [];
-
-  // 3. Sử dụng Set để lọc bỏ các zone_id trùng lặp (vì nhiều ao có thể chung một Zone)
-  const zoneIds = pondsData
-    .map((p) => p.zone_id)
-    .filter((zoneId): zoneId is string => !!zoneId); // Loại bỏ giá trị null/undefined nếu có
-
-  return Array.from(new Set(zoneIds));
-};
 
 // 1. Lấy thông số KPI tổng quan
 export const getDashboardKPIs = async (userId: string) => {
