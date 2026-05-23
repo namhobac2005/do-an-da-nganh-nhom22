@@ -54,7 +54,9 @@ export const listZones = async (userId: string, role?: string) => {
     .select('zone_id')
     .in('id', pondIds);
   if (pErr) throw pErr;
-  const zoneIds = [...new Set((ponds || []).map((p: any) => p.zone_id).filter(Boolean))];
+  const zoneIds = [
+    ...new Set((ponds || []).map((p: any) => p.zone_id).filter(Boolean)),
+  ];
   if (zoneIds.length === 0) return [];
 
   // Step 3: fetch those zones with pond counts (only assigned ponds count)
@@ -97,9 +99,9 @@ export const createZone = async (dto: {
   const { data, error } = await supabase
     .from('zones')
     .insert({
-      name:     dto.name,
+      name: dto.name,
       location: dto.location ?? null,
-      status:   dto.status   ?? 'active',
+      status: dto.status ?? 'active',
     })
     .select()
     .single();
@@ -113,11 +115,12 @@ export const updateZoneById = async (
   dto: { name?: string; location?: string; status?: string },
 ) => {
   const payload: Record<string, any> = {};
-  if (dto.name     !== undefined) payload.name     = dto.name;
+  if (dto.name !== undefined) payload.name = dto.name;
   if (dto.location !== undefined) payload.location = dto.location;
-  if (dto.status   !== undefined) payload.status   = dto.status;
+  if (dto.status !== undefined) payload.status = dto.status;
 
-  if (Object.keys(payload).length === 0) throw new Error('Không có dữ liệu để cập nhật.');
+  if (Object.keys(payload).length === 0)
+    throw new Error('Không có dữ liệu để cập nhật.');
 
   const { data, error } = await supabase
     .from('zones')
@@ -144,19 +147,25 @@ export const deleteZoneById = async (id: string) => {
  * - Admin: tất cả ponds trong zone
  * - User: chỉ ponds mà user được phân quyền
  */
-export const listPondsByZone = async (zoneId: string, userId: string, role?: string) => {
+export const listPondsByZone = async (
+  zoneId: string,
+  userId: string,
+  role?: string,
+) => {
   if (role === 'admin') {
     const { data, error } = await supabase
       .from('ponds')
-      .select('id, name, zone_id, location, farming_type, status, created_at, sensors(id), actuators(id)')
+      .select(
+        'id, name, zone_id, location, farming_type, status, created_at, sensors(id), actuators(id)',
+      )
       .eq('zone_id', zoneId)
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((p: any) => ({
       ...p,
-      sensor_count:   p.sensors?.length   ?? 0,
+      sensor_count: p.sensors?.length ?? 0,
       actuator_count: p.actuators?.length ?? 0,
-      sensors:   undefined,
+      sensors: undefined,
       actuators: undefined,
     }));
   }
@@ -167,21 +176,25 @@ export const listPondsByZone = async (zoneId: string, userId: string, role?: str
     .select('pond_id')
     .eq('user_id', userId);
   if (upErr) throw upErr;
-  const assignedIds = (userPonds || []).map((r: any) => r.pond_id).filter(Boolean);
+  const assignedIds = (userPonds || [])
+    .map((r: any) => r.pond_id)
+    .filter(Boolean);
   if (assignedIds.length === 0) return [];
 
   const { data, error } = await supabase
     .from('ponds')
-    .select('id, name, zone_id, location, farming_type, status, created_at, sensors(id), actuators(id)')
+    .select(
+      'id, name, zone_id, location, farming_type, status, created_at, sensors(id), actuators(id)',
+    )
     .eq('zone_id', zoneId)
     .in('id', assignedIds)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return (data || []).map((p: any) => ({
     ...p,
-    sensor_count:   p.sensors?.length   ?? 0,
+    sensor_count: p.sensors?.length ?? 0,
     actuator_count: p.actuators?.length ?? 0,
-    sensors:   undefined,
+    sensors: undefined,
     actuators: undefined,
   }));
 };
@@ -192,11 +205,13 @@ export const listPondsByZone = async (zoneId: string, userId: string, role?: str
 export const getPondDetail = async (pondId: string) => {
   const { data: pond, error } = await supabase
     .from('ponds')
-    .select(`
+    .select(
+      `
       id, name, zone_id, location, farming_type, status, created_at,
       sensors ( id, name, type, status ),
       actuators ( id, name, type, status )
-    `)
+    `,
+    )
     .eq('id', pondId)
     .single();
 
@@ -216,9 +231,11 @@ export const getPondDetail = async (pondId: string) => {
     .eq('pond_id', pondId);
 
   const stats = {
-    totalSensors:   pond.sensors?.length   ?? 0,
+    totalSensors: pond.sensors?.length ?? 0,
     totalActuators: pond.actuators?.length ?? 0,
-    managers: (managers || []).map((m: any) => m.users?.username).filter(Boolean),
+    managers: (managers || [])
+      .map((m: any) => m.users?.username)
+      .filter(Boolean),
   };
 
   return {
@@ -229,20 +246,23 @@ export const getPondDetail = async (pondId: string) => {
 };
 
 /** Tạo Pond trong Zone (Admin) */
-export const createPond = async (zoneId: string, dto: {
-  name: string;
-  location?: string;
-  farming_type?: string;
-  status?: string;
-}) => {
+export const createPond = async (
+  zoneId: string,
+  dto: {
+    name: string;
+    location?: string;
+    farming_type?: string;
+    status?: string;
+  },
+) => {
   const { data, error } = await supabase
     .from('ponds')
     .insert({
-      zone_id:      zoneId,
-      name:         dto.name,
-      location:     dto.location     ?? null,
+      zone_id: zoneId,
+      name: dto.name,
+      location: dto.location ?? null,
       farming_type: dto.farming_type ?? null,
-      status:       dto.status       ?? 'active',
+      status: dto.status ?? 'active',
     })
     .select()
     .single();
@@ -251,19 +271,23 @@ export const createPond = async (zoneId: string, dto: {
 };
 
 /** Cập nhật Pond (Admin) */
-export const updatePond = async (pondId: string, dto: {
-  name?: string;
-  location?: string;
-  farming_type?: string;
-  status?: string;
-}) => {
+export const updatePond = async (
+  pondId: string,
+  dto: {
+    name?: string;
+    location?: string;
+    farming_type?: string;
+    status?: string;
+  },
+) => {
   const payload: Record<string, any> = {};
-  if (dto.name         !== undefined) payload.name         = dto.name;
-  if (dto.location     !== undefined) payload.location     = dto.location;
+  if (dto.name !== undefined) payload.name = dto.name;
+  if (dto.location !== undefined) payload.location = dto.location;
   if (dto.farming_type !== undefined) payload.farming_type = dto.farming_type;
-  if (dto.status       !== undefined) payload.status       = dto.status;
+  if (dto.status !== undefined) payload.status = dto.status;
 
-  if (Object.keys(payload).length === 0) throw new Error('Không có dữ liệu để cập nhật.');
+  if (Object.keys(payload).length === 0)
+    throw new Error('Không có dữ liệu để cập nhật.');
 
   const { data, error } = await supabase
     .from('ponds')
