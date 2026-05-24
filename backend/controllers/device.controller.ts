@@ -44,7 +44,14 @@ export const controlDevice = async (req: CustomRequest, res: Response) => {
 
     res.status(200).json(result);
   } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
+    const isAdafruitError =
+      typeof error?.message === "string" &&
+      error.message.includes("Adafruit IO");
+
+    res.status(isAdafruitError ? 503 : 400).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 

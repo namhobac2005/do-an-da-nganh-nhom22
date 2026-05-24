@@ -59,6 +59,14 @@ const aioHeaders = () => ({
   headers: { "X-AIO-Key": AIO_KEY, "Content-Type": "application/json" },
 });
 
+const requireAioConfig = () => {
+  if (!AIO_USERNAME || !AIO_KEY) {
+    throw new Error(
+      "Thiếu cấu hình Adafruit IO: vui lòng thiết lập AIO_USERNAME và AIO_KEY.",
+    );
+  }
+};
+
 /**
  * Lấy danh sách thiết bị từ bảng actuators
  */
@@ -98,20 +106,39 @@ export const controlDevice = async (
   // 1. Lấy thông tin từ bảng 'actuators' và kiểm tra zone trước khi điều khiển
   const device = await ensureDeviceAccess(deviceId, userId, role);
 
-  const feedKey = device.feed_key || device.type.toLowerCase();
+  requireAioConfig();
 
-  // 2. Gửi lệnh lên Adafruit IO (Giữ nguyên logic cũ)
+  const feedKey =
+    typeof device.feed_key === "string" ? device.feed_key.trim() : "";
+
+  if (!feedKey) {
+    throw new Error(
+      `Thiết bị "${device.name || deviceId}" chưa có feed_key Adafruit IO hợp lệ.`,
+    );
+  }
+
+  // 2. Gửi lệnh lên Adafruit IO qua đúng feed_key đã cấu hình
   try {
     await axios.post(
       `${AIO_BASE_URL}/${feedKey}/data`,
       {
         value: level.toString(),
       },
-      {
-        headers: { "X-AIO-Key": AIO_KEY, "Content-Type": "application/json" },
-      },
+      aioHeaders(),
     );
   } catch (aioError: any) {
+    const status = aioError?.response?.status;
+
+    if (status === 404) {
+      throw new Error(
+        `Không tìm thấy feed Adafruit IO "${feedKey}" của thiết bị "${device.name || deviceId}".`,
+      );
+    }
+
+    if (status === 401 || status === 403) {
+      throw new Error("Không có quyền truy cập Adafruit IO.");
+    }
+
     throw new Error("Adafruit IO Offline");
   }
 
