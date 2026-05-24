@@ -118,6 +118,31 @@ export const runDueSchedules = async () => {
 
   for (const schedule of data) {
     try {
+      // Nếu thiết bị đang ở chế độ `manual` thì không thực hiện lịch
+      const { data: actuatorRow, error: actuatorErr } = await supabase
+        .from("actuators")
+        .select("mode")
+        .eq("id", schedule.actuator_id)
+        .single();
+
+      if (actuatorErr) {
+        // Nếu không thể lấy thông tin thiết bị, đánh dấu lịch là failed
+        await supabase
+          .from(SCHEDULE_TABLE)
+          .update({ status: "failed", updated_at: new Date().toISOString() })
+          .eq("id", schedule.id);
+        continue;
+      }
+
+      if (actuatorRow && actuatorRow.mode === "manual") {
+        // Bỏ qua lịch cho thiết bị đang ở chế độ thủ công
+        await supabase
+          .from(SCHEDULE_TABLE)
+          .update({ status: "skipped", updated_at: new Date().toISOString() })
+          .eq("id", schedule.id);
+        continue;
+      }
+
       await deviceService.controlDevice(
         schedule.actuator_id,
         schedule.target_level,

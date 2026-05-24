@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { CalendarClock, Trash2 } from "lucide-react";
 import type { Device } from "./DieuKhien";
 import type { DeviceSchedule } from "../../services/deviceService";
+import ZonePondSelector from "../../components/common/ZonePondSelector";
 
 export interface ScheduleTemplate {
   id: string;
@@ -32,6 +33,9 @@ interface LapLichProps {
   zones?: { id: string; name: string }[];
   selectedZoneIds?: string[];
   onSelectedZoneIdsChange?: (values: string[]) => void;
+  /** Positions: up to 3 applied positions with zone + pond selections */
+  positions?: { zoneId: string; pondId: string }[];
+  onPositionsChange?: (positions: { zoneId: string; pondId: string }[]) => void;
   startDate?: string;
   endDate?: string;
   onStartDateChange?: (value: string) => void;
@@ -95,6 +99,8 @@ export const LapLich: React.FC<LapLichProps> = ({
   zones = [],
   selectedZoneIds = [],
   onSelectedZoneIdsChange = () => {},
+  positions = [],
+  onPositionsChange = () => {},
   startDate = "",
   endDate = "",
   onStartDateChange = () => {},
@@ -104,6 +110,33 @@ export const LapLich: React.FC<LapLichProps> = ({
   scheduleMode = "template",
   onScheduleModeChange = () => {},
 }) => {
+  const updatePosition = (
+    index: number,
+    patch: Partial<{ zoneId: string; pondId: string }>,
+  ) => {
+    const next = positions.slice();
+    while (next.length <= index) next.push({ zoneId: "", pondId: "" });
+    next[index] = { ...next[index], ...patch };
+    onPositionsChange(next);
+    const zoneIds = next.map((p) => p.zoneId).filter(Boolean);
+    onSelectedZoneIdsChange(zoneIds);
+  };
+
+  const addPosition = () => {
+    if (positions.length >= 6) return; // max 6 positions
+    const next = [...positions, { zoneId: "", pondId: "" }];
+    onPositionsChange(next);
+    onSelectedZoneIdsChange(next.map((p) => p.zoneId).filter(Boolean));
+  };
+
+  const removePosition = (index: number) => {
+    if (positions.length <= 1) return;
+    const next = positions.slice();
+    next.splice(index, 1);
+    onPositionsChange(next);
+    onSelectedZoneIdsChange(next.map((p) => p.zoneId).filter(Boolean));
+  };
+
   const getActionOptionsByType = (deviceType: Device["type"] | undefined) =>
     deviceType === "light"
       ? [
@@ -319,40 +352,49 @@ export const LapLich: React.FC<LapLichProps> = ({
                   className="text-gray-700"
                   style={{ fontSize: 13, fontWeight: 600 }}
                 >
-                  Áp dụng cho ao:
+                  Vị trí áp dụng:
                 </label>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  {zones.map((z) => (
-                    <label
-                      key={z.id}
-                      className="flex items-center gap-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedZoneIds.includes(z.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            onSelectedZoneIdsChange([...selectedZoneIds, z.id]);
-                          } else {
-                            onSelectedZoneIdsChange(
-                              selectedZoneIds.filter((id) => id !== z.id),
-                            );
-                          }
-                        }}
+                <div className="grid grid-cols-1 gap-3 mt-2">
+                  {positions.map((pos, i) => (
+                    <div key={i} className="space-y-1 border rounded p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold">Vị trí {i + 1}</p>
+                        <div className="flex gap-2">
+                          {positions.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removePosition(i)}
+                              className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100"
+                            >
+                              Xóa vị trí
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <ZonePondSelector
+                        onZoneSelect={(zoneId) =>
+                          updatePosition(i, { zoneId, pondId: "" })
+                        }
+                        onPondSelect={(pondId) => updatePosition(i, { pondId })}
+                        initialZoneId={pos?.zoneId || null}
+                        initialPondId={pos?.pondId || null}
                       />
-                      {z.name}
-                    </label>
+                    </div>
                   ))}
+
+                  <div>
+                    <button
+                      type="button"
+                      onClick={addPosition}
+                      className="text-sm px-3 py-2 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    >
+                      Thêm vị trí
+                    </button>
+                    <p className="text-gray-400 text-xs mt-1">
+                      Bạn có thể thêm nhiều vị trí (tối đa 6)
+                    </p>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSelectedZoneIdsChange(zones.map((z) => z.id))
-                  }
-                  className="mt-2 text-xs px-2 py-1 bg-gray-200 rounded hover:bg-gray-300"
-                >
-                  Chọn tất cả
-                </button>
               </div>
 
               <div className="md:col-span-2">

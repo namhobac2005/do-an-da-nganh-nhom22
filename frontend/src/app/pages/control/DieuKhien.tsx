@@ -655,6 +655,9 @@ export const DieuKhien: React.FC = () => {
   const [selectedPondId, setSelectedPondId] = useState<string>("");
   const [loadingPonds, setLoadingPonds] = useState(false);
   const [selectedZoneIds, setSelectedZoneIds] = useState<string[]>([]);
+  const [positions, setPositions] = useState<
+    { zoneId: string; pondId: string }[]
+  >([{ zoneId: "", pondId: "" }]);
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [repeatDaily, setRepeatDaily] = useState<boolean>(false);
@@ -1054,7 +1057,18 @@ export const DieuKhien: React.FC = () => {
       templates.some((template) => template.deviceType === device.type),
     );
 
-    if (selectedZoneIds.length > 0) {
+    // If positions include specific ponds, prefer pond-level filtering.
+    const posPondIds = positions.map((p) => p.pondId).filter(Boolean);
+    const posZoneIds = positions.map((p) => p.zoneId).filter(Boolean);
+    if (posPondIds.length > 0) {
+      targetDevices = targetDevices.filter((d) =>
+        posPondIds.includes(d.pond_id ?? ""),
+      );
+    } else if (posZoneIds.length > 0) {
+      targetDevices = targetDevices.filter((d) =>
+        posZoneIds.includes(d.zone_id ?? ""),
+      );
+    } else if (selectedZoneIds.length > 0) {
       targetDevices = targetDevices.filter((d) =>
         selectedZoneIds.includes(d.zone_id ?? ""),
       );
@@ -1239,10 +1253,19 @@ export const DieuKhien: React.FC = () => {
 
     setIsScheduleSubmitting(true);
 
-    // Determine target devices: if zones selected, target devices are those in selected zones,
-    // otherwise target the single selectedScheduleDeviceId
+    // Determine target devices: prefer positions (pond -> zone), else use selectedZoneIds or single device
     let targetDevices = [] as any[];
-    if (selectedZoneIds.length > 0) {
+    const posPondIds = positions.map((p) => p.pondId).filter(Boolean);
+    const posZoneIds = positions.map((p) => p.zoneId).filter(Boolean);
+    if (posPondIds.length > 0) {
+      targetDevices = devices.filter((d) =>
+        posPondIds.includes(d.pond_id ?? ""),
+      );
+    } else if (posZoneIds.length > 0) {
+      targetDevices = devices.filter((d) =>
+        posZoneIds.includes(d.zone_id ?? ""),
+      );
+    } else if (selectedZoneIds.length > 0) {
       targetDevices = devices.filter((d) =>
         selectedZoneIds.includes(d.zone_id ?? ""),
       );
@@ -1465,6 +1488,11 @@ export const DieuKhien: React.FC = () => {
         zones={zones}
         selectedZoneIds={selectedZoneIds}
         onSelectedZoneIdsChange={setSelectedZoneIds}
+        positions={positions}
+        onPositionsChange={(next) => {
+          setPositions(next);
+          setSelectedZoneIds(next.map((p) => p.zoneId).filter(Boolean));
+        }}
         startDate={startDate}
         endDate={endDate}
         onStartDateChange={setStartDate}
