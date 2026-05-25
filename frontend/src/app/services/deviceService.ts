@@ -44,12 +44,25 @@ export const getAllDevices = async () => {
   try {
     const dbDevices = await api.get<any[]>("/devices");
 
+    const normalizeStatus = (status: any) => {
+      const raw = String(status ?? "")
+        .trim()
+        .toLowerCase();
+
+      if (raw === "on" || raw === "1" || raw === "true") return "ON";
+      if (raw === "off" || raw === "0" || raw === "false") return "OFF";
+
+      return String(status ?? "OFF").toUpperCase();
+    };
+
     return dbDevices.map((dbDev: any) => {
+      const normalizedStatus = normalizeStatus(dbDev.status);
+
       // Xác định level: Nếu là số thì giữ nguyên, nếu là chữ ON/OFF thì map về 1/0
       const currentLevel =
         typeof dbDev.status === "number"
           ? dbDev.status
-          : dbDev.status === "ON"
+          : normalizedStatus === "ON"
             ? 1
             : 0;
 
@@ -58,7 +71,7 @@ export const getAllDevices = async () => {
         name: dbDev.name || "Thiết bị không tên",
         type: dbDev.type?.toLowerCase() || "pump",
         feed_key: dbDev.feed_key || "",
-        isActive: dbDev.status !== "OFF" && dbDev.status !== 0,
+        isActive: normalizedStatus !== "OFF",
         level: currentLevel,
         isOnline: true, // Mặc định true vì đã lấy được từ DB
         mode: dbDev.mode ? dbDev.mode.toLowerCase() : "manual",

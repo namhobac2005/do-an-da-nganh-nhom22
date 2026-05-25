@@ -1,7 +1,7 @@
-import axios from 'axios';
-import mqtt from 'mqtt';
-import { createClient } from '@supabase/supabase-js';
-import dotenv from 'dotenv';
+import axios from "axios";
+import mqtt from "mqtt";
+import { createClient } from "@supabase/supabase-js";
+import dotenv from "dotenv";
 
 dotenv.config();
 
@@ -13,7 +13,7 @@ const aioKey = process.env.AIO_KEY!;
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const client = mqtt.connect('mqtts://io.adafruit.com', {
+const client = mqtt.connect("mqtts://io.adafruit.com", {
   username: aioUsername,
   password: aioKey,
 });
@@ -23,36 +23,36 @@ const client = mqtt.connect('mqtts://io.adafruit.com', {
  */
 export const initMQTT = async () => {
   // Lấy danh sách feed_key từ cả 2 bảng
-  const { data: senKeys } = await supabase.from('sensors').select('feed_key');
-  const { data: actKeys } = await supabase.from('actuators').select('feed_key');
+  const { data: senKeys } = await supabase.from("sensors").select("feed_key");
+  const { data: actKeys } = await supabase.from("actuators").select("feed_key");
 
   const allKeys = [
     ...(senKeys?.map((k) => k.feed_key) || []),
     ...(actKeys?.map((k) => k.feed_key) || []),
   ].filter(Boolean);
 
-  client.on('connect', () => {
-    console.log('✅ MQTT Connected!');
+  client.on("connect", () => {
+    console.log("✅ MQTT Connected!");
     allKeys.forEach((key) => {
       client.subscribe(`${aioUsername}/feeds/${key}`);
       console.log(`Đang theo dõi feed: ${key}`);
     });
   });
 
-  client.on('message', async (topic, message) => {
-    const feedKey = topic.split('/').pop() || '';
+  client.on("message", async (topic, message) => {
+    const feedKey = topic.split("/").pop() || "";
     const value = message.toString();
     console.log(`Nhận tin real-time: [${feedKey}] -> ${value}`);
 
     // 1. KIỂM TRA VÀ GHI DỮ LIỆU SENSOR
     const { data: sensor } = await supabase
-      .from('sensors')
-      .select('id')
-      .eq('feed_key', feedKey)
+      .from("sensors")
+      .select("id")
+      .eq("feed_key", feedKey)
       .maybeSingle();
 
     if (sensor) {
-      await supabase.from('sensor_data').insert([
+      await supabase.from("sensor_data").insert([
         {
           sensor_id: sensor.id,
           value: parseFloat(value),
@@ -64,29 +64,63 @@ export const initMQTT = async () => {
 
     // 2. KIỂM TRA VÀ GHI TRẠNG THÁI ACTUATOR
     const { data: actuator } = await supabase
-      .from('actuators')
-      .select('id, name')
-      .eq('feed_key', feedKey)
+      .from("actuators")
+      .select("id, name, mode")
+      .eq("feed_key", feedKey)
       .maybeSingle();
 
     if (actuator) {
-      // Cập nhật trạng thái hiện tại của thiết bị
-      await supabase
-        .from('actuators')
-        .update({ status: value })
-        .eq('id', actuator.id);
+      const normalizedStatus = (() => {
+        const normalized = value.trim().toLowerCase();
+        if (
+          normalized === "1" ||
+          normalized === "true" ||
+          normalized === "on"
+        ) {
+          return "ON";
+        }
 
-      // Ghi lịch sử hoạt động vào bảng actuator_logs
-      // await supabase.from('actuator_logs').insert([
-      //   {
-      //     actuator_id: actuator.id,
-      //     action: 'MQTT Update',
-      //     status: value,
-      //     mode: 'manual', // Mặc định thủ công khi nhận lệnh từ feed
-      //   },
-      // ]);
+        if (
+          normalized === "0" ||
+          normalized === "false" ||
+          normalized === "off"
+        ) {
+          return "OFF";
+        }
 
-      console.log(`Đã cập nhật thiết bị: ${actuator.name} -> ${value}`);
+        return value.toUpperCase();
+      })();
+
+      const { error: updateError } = await supabase
+        .from("actuators")
+        .update({ status: normalizedStatus })
+        .eq("id", actuator.id);
+
+      if (updateError) {
+        console.error(
+          `❌ Lỗi cập nhật trạng thái thiết bị ${actuator.name}: ${updateError.message}`,
+        );
+        return;
+      }
+
+      const { error: logError } = await supabase.from("actuator_logs").insert([
+        {
+          actuator_id: actuator.id,
+          action: "MQTT Update",
+          status: normalizedStatus,
+          mode: actuator.mode || "manual",
+        },
+      ]);
+
+      if (logError) {
+        console.error(
+          `❌ Lỗi ghi log thiết bị ${actuator.name}: ${logError.message}`,
+        );
+      }
+
+      console.log(
+        `Đã cập nhật thiết bị: ${actuator.name} -> ${normalizedStatus}`,
+      );
     }
   });
 };
@@ -97,9 +131,9 @@ export const initMQTT = async () => {
 export const syncAllDataFromAdafruit = async () => {
   // 1. Lấy tất cả cảm biến (nên filter thêm để tránh lấy null feed_key)
   const { data: dbSensors } = await supabase
-    .from('sensors')
-    .select('id, feed_key')
-    .not('feed_key', 'is', null);
+    .from("sensors")
+    .select("id, feed_key")
+    .not("feed_key", "is", null);
 
   if (!dbSensors || dbSensors.length === 0) return;
 
@@ -114,7 +148,7 @@ export const syncAllDataFromAdafruit = async () => {
   ).toISOString();
 
   // Dùng để log ra console cho dễ nhìn
-  const displayTime = now.toLocaleTimeString('vi-VN');
+  const displayTime = now.toLocaleTimeString("vi-VN");
 
   console.log(`🔄 Bắt đầu đồng bộ toàn hệ thống lúc: ${displayTime}`);
 
@@ -124,7 +158,7 @@ export const syncAllDataFromAdafruit = async () => {
     try {
       const response = await axios.get(
         `https://io.adafruit.com/api/v2/${aioUsername}/feeds/${sensor.feed_key}/data/last`,
-        { headers: { 'X-AIO-Key': aioKey } },
+        { headers: { "X-AIO-Key": aioKey } },
       );
 
       if (response.data && response.data.value !== undefined) {
@@ -141,10 +175,10 @@ export const syncAllDataFromAdafruit = async () => {
 
   // 3. Insert hàng loạt (Bulk Insert) để tối ưu và đảm bảo tính đồng nhất
   if (dataToInsert.length > 0) {
-    const { error } = await supabase.from('sensor_data').insert(dataToInsert);
+    const { error } = await supabase.from("sensor_data").insert(dataToInsert);
 
     if (error) {
-      console.error('❌ Lỗi lưu dữ liệu đồng bộ:', error.message);
+      console.error("❌ Lỗi lưu dữ liệu đồng bộ:", error.message);
     } else {
       console.log(
         `✅ Thành công! Đã gộp ${dataToInsert.length} sensor vào mốc ${displayTime}`,
@@ -163,7 +197,7 @@ export const startIoTSystem = async () => {
   // 3. THIẾT LẬP POLLING: Cứ mỗi 5 giây tự đi lấy data 1 lần
   const SYNC_INTERVAL = 5 * 1000;
   setInterval(async () => {
-    console.log('⏰ Đến giờ đồng bộ định kỳ...');
+    console.log("⏰ Đến giờ đồng bộ định kỳ...");
     await syncAllDataFromAdafruit();
   }, SYNC_INTERVAL);
 };
