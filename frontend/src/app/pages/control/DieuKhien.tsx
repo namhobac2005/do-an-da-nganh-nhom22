@@ -29,6 +29,7 @@ import {
   getDeviceSchedules,
   createDeviceSchedule,
   cancelDeviceSchedule,
+  updateDevice,
   type DeviceSchedule,
   type SendCommandResult,
 } from "../../services/deviceService";
@@ -876,10 +877,42 @@ export const DieuKhien: React.FC = () => {
   }, [confirmDialog]);
 
   const handleModeChange = useCallback(
-    (deviceId: string, newMode: DeviceMode) => {
+    async (deviceId: string, newMode: DeviceMode) => {
+      // optimistic update: remember previous mode to allow rollback
+      let previousMode: DeviceMode = "manual";
       setDevices((prev) =>
-        prev.map((d) => (d.id === deviceId ? { ...d, mode: newMode } : d)),
+        prev.map((d) => {
+          if (d.id === deviceId) {
+            previousMode = d.mode;
+            return { ...d, mode: newMode };
+          }
+          return d;
+        }),
       );
+
+      setLoadingDeviceId(deviceId);
+
+      try {
+        const res = await updateDevice(deviceId, { mode: newMode });
+        if (!res.success) {
+          // rollback
+          setDevices((prev) =>
+            prev.map((d) =>
+              d.id === deviceId ? { ...d, mode: previousMode } : d,
+            ),
+          );
+          alert(`Không thể cập nhật chế độ: ${res.error || "Lỗi server"}`);
+        }
+      } catch (err: any) {
+        setDevices((prev) =>
+          prev.map((d) =>
+            d.id === deviceId ? { ...d, mode: previousMode } : d,
+          ),
+        );
+        alert(`Lỗi khi gọi API: ${err?.message || String(err)}`);
+      } finally {
+        setLoadingDeviceId(null);
+      }
     },
     [],
   );
