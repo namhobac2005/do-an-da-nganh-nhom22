@@ -48,20 +48,43 @@ export const DevicesPage: React.FC = () => {
         deviceService.getAllDevices(),
         zoneService.getZones(),
       ]);
-      // Transform devices to include all required fields
-      const formattedDevices = devicesData.map((dev: any) => ({
-        id: dev.id,
-        name: dev.name,
-        type: dev.type as any,
-        feed_key: dev.feed_key,
-        pond_id: dev.pond_id,
-        zone_id: dev.zone_id ?? null,
-        status: dev.status || "OFF",
-        mode: dev.mode || "manual",
-        description: dev.description,
-        created_at: dev.created_at,
-        updated_at: dev.updated_at,
-      }));
+      // Build a map of ponds by id by fetching ponds for each zone
+      const pondMap: Record<string, any> = {};
+      await Promise.all(
+        (zonesData || []).map(async (z: any) => {
+          try {
+            const ponds = await zoneService.getPondsByZone(z.id);
+            (ponds || []).forEach((p: any) => {
+              pondMap[p.id] = { ...p, zone_id: z.id, zone_name: z.name };
+            });
+          } catch (e) {
+            // ignore per-zone pond fetch errors
+          }
+        }),
+      );
+
+      // Transform devices to include names for zone and pond when available
+      const formattedDevices = devicesData.map((dev: any) => {
+        const pond = dev.pond_id ? pondMap[dev.pond_id] : undefined;
+        const zoneName =
+          pond?.zone_name ||
+          (zonesData.find((z: any) => z.id === dev.zone_id)?.name ?? null);
+        return {
+          id: dev.id,
+          name: dev.name,
+          type: dev.type as any,
+          feed_key: dev.feed_key,
+          pond_id: dev.pond_id,
+          zone_id: dev.zone_id ?? pond?.zone_id ?? null,
+          pond_name: pond?.name ?? null,
+          zone_name: zoneName ?? null,
+          status: dev.status || "OFF",
+          mode: dev.mode || "manual",
+          description: dev.description,
+          created_at: dev.created_at,
+          updated_at: dev.updated_at,
+        } as Device;
+      });
       setDevices(formattedDevices);
       setZones(zonesData);
     } catch (err: any) {

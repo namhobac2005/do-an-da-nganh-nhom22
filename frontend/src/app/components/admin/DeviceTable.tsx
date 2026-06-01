@@ -212,6 +212,18 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
                 </p>
               )}
 
+              {/* Zone & Pond */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">Vùng:</span>
+                <span className="text-xs text-gray-700 font-medium">
+                  {device.zone_name || "Không rõ"}
+                </span>
+                <span className="text-xs text-gray-500">· Ao:</span>
+                <span className="text-xs text-gray-700 font-medium">
+                  {device.pond_name || "Không rõ"}
+                </span>
+              </div>
+
               {/* Created at */}
               <p className="text-xs text-gray-400">
                 Tạo{" "}
