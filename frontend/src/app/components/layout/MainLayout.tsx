@@ -2,15 +2,21 @@
  * MainLayout.tsx
  * Layout chính bao gồm Sidebar + Header + Content area
  * Được dùng cho tất cả các trang sau khi đăng nhập
+ *
+ * Activates useRealtimeAlerts() for global push notifications.
  */
 
 import { useState } from 'react';
 import { Outlet } from 'react-router';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { useRealtimeAlerts } from '../../hooks/useRealtimeAlerts';
 
 export const MainLayout: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Global: subscribe to Supabase Realtime alerts for toast notifications
+  useRealtimeAlerts();
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
@@ -35,3 +41,4 @@ export const MainLayout: React.FC = () => {
     </div>
   );
 };
+

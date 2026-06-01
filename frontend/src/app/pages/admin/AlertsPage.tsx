@@ -1,6 +1,11 @@
 /**
- * AlertsPage.tsx — UC15 & UC16
+ * AlertsPage.tsx — UC15 & UC16 (Admin View)
  * Two tabs: Thiết lập ngưỡng / Nhật ký cảnh báo
+ *
+ * Refactored to:
+ *   - Use cascading ZonePondSelector (Zone → Pond)
+ *   - Remove "Áp dụng cho" dropdown — thresholds are strictly pond-level
+ *   - Metrics: Ánh sáng (light), Nhiệt độ (temperature), Mực nước (water_level)
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -9,18 +14,18 @@ import { toast } from 'sonner';
 import {
   Bell, Settings2, Plus, Trash2, CheckCircle2,
   RefreshCw, AlertCircle, ShieldAlert, Loader2, ChevronLeft, ChevronRight,
+  AlertTriangle, Fish, Settings,
 } from 'lucide-react';
 import * as alertService from '../../services/alertService';
-import * as zoneService  from '../../services/zoneService';
-import type { Threshold, AlertLog, Metric, TargetType } from '../../services/alertService';
-import type { Zone } from '../../types/user.types';
+import { ZonePondSelector } from '../../components/common/ZonePondSelector';
+import type { Threshold, AlertLog, Metric } from '../../services/alertService';
 
 // ===== CONSTANTS =====
 
 const METRICS: { value: Metric; label: string; unit: string }[] = [
-  { value: 'pH',          label: 'pH',          unit: '' },
-  { value: 'temperature', label: 'Nhiệt độ',    unit: '°C' },
-  { value: 'DO',          label: 'Ô xy hoà tan (DO)', unit: 'mg/L' },
+  { value: 'light',       label: 'Ánh sáng',  unit: 'lux' },
+  { value: 'temperature', label: 'Nhiệt độ',  unit: '°C' },
+  { value: 'water_level', label: 'Mực nước',   unit: 'cm' },
 ];
 
 const STATUS_MAP = {
@@ -31,14 +36,12 @@ const STATUS_MAP = {
 // ===== TAB 1: THRESHOLD SETTINGS =====
 
 interface ThresholdFormValues {
-  target_type: TargetType;
-  target_id:   string;
-  metric:      Metric;
-  min_value:   string;
-  max_value:   string;
+  metric:    Metric;
+  min_value: string;
+  max_value: string;
 }
 
-const ThresholdTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
+const ThresholdTab: React.FC<{ selectedPond: string; pondName: string }> = ({ selectedPond, pondName }) => {
   const [thresholds,   setThresholds]   = useState<Threshold[]>([]);
   const [isLoading,    setIsLoading]    = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -48,16 +51,15 @@ const ThresholdTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
     try { setThresholds(await alertService.getThresholds()); }
     catch { toast.error('Không thể tải ngưỡng cảnh báo.'); }
     finally { setIsLoading(false); }
-  }, []);
+  }, [selectedPond]);
 
   useEffect(() => { fetchThresholds(); }, [fetchThresholds]);
 
   const { register, handleSubmit, watch, formState: { errors }, reset } =
     useForm<ThresholdFormValues>({
-      defaultValues: { target_type: 'zone', target_id: '', metric: 'pH', min_value: '', max_value: '' },
+      defaultValues: { metric: 'light', min_value: '', max_value: '' },
     });
 
-  const targetType = watch('target_type');
   const minVal     = watch('min_value');
   const maxVal     = watch('max_value');
   const minMaxErr  = minVal && maxVal && Number(minVal) >= Number(maxVal);
@@ -67,8 +69,8 @@ const ThresholdTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
     setIsSubmitting(true);
     try {
       const saved = await alertService.upsertThreshold({
-        target_type: vals.target_type,
-        target_id:   vals.target_id,
+        target_type: 'pond',
+        target_id:   selectedPond,
         metric:      vals.metric,
         min_value:   Number(vals.min_value),
         max_value:   Number(vals.max_value),
@@ -110,37 +112,15 @@ const ThresholdTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
           Thêm / cập nhật ngưỡng cảnh báo
         </h2>
         <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Target type */}
+          {/* Ao nuôi đang chọn */}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Áp dụng cho</label>
-            <select {...register('target_type')} className={inputCls()}>
-              <option value="zone">Vùng ao cụ thể</option>
-              <option value="farming_type">Loại nuôi</option>
-            </select>
-          </div>
-
-          {/* Target id */}
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">
-              {targetType === 'zone' ? 'Chọn vùng ao' : 'Nhập loại nuôi'}
-              <span className="text-red-500 ml-0.5">*</span>
-            </label>
-            {targetType === 'zone' ? (
-              <select
-                {...register('target_id', { required: 'Vui lòng chọn vùng ao.' })}
-                className={inputCls(!!errors.target_id)}
-              >
-                <option value="">— Chọn vùng ao —</option>
-                {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
-              </select>
-            ) : (
-              <input
-                {...register('target_id', { required: 'Vui lòng nhập loại nuôi.' })}
-                placeholder="VD: Tôm thẻ chân trắng"
-                className={inputCls(!!errors.target_id)}
-              />
-            )}
-            {errors.target_id && <p className="text-red-500 text-xs mt-1">{errors.target_id.message}</p>}
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Ao nuôi</label>
+            <input
+              type="text"
+              disabled
+              value={pondName || 'Chọn ao ở phần trên'}
+              className={inputCls()}
+            />
           </div>
 
           {/* Metric */}
@@ -178,7 +158,7 @@ const ThresholdTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
           {/* Validation error */}
           {minMaxErr && (
             <div className="sm:col-span-2">
-              <p className="text-red-500 text-xs">Ngưỡng dưới không được lớn hơn hoặc bằng ngưỡng trên.</p>
+              <p className="text-red-500 text-xs font-semibold">⚠ Ngưỡng dưới không được lớn hơn hoặc bằng ngưỡng trên.</p>
             </div>
           )}
 
@@ -207,7 +187,7 @@ const ThresholdTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50/60 border-b border-gray-100">
-                {['Đối tượng', 'Loại', 'Chỉ số', 'Ngưỡng dưới', 'Ngưỡng trên', ''].map((h) => (
+                {['Ao nuôi', 'Chỉ số', 'Ngưỡng dưới', 'Ngưỡng trên', ''].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -215,28 +195,23 @@ const ThresholdTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
             <tbody className="divide-y divide-gray-50">
               {isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
-                  <tr key={i}>{Array.from({ length: 6 }).map((__, j) => (
+                  <tr key={i}>{Array.from({ length: 5 }).map((__, j) => (
                     <td key={j} className="px-4 py-3"><div className="h-4 bg-gray-100 rounded animate-pulse" /></td>
                   ))}</tr>
                 ))
               ) : thresholds.length === 0 ? (
-                <tr><td colSpan={6} className="py-12 text-center text-gray-400 text-sm">Chưa có ngưỡng nào được thiết lập.</td></tr>
+                <tr><td colSpan={5} className="py-12 text-center text-gray-400 text-sm">Chưa có ngưỡng nào được thiết lập.</td></tr>
               ) : (
-                thresholds.map((t) => {
+                thresholds
+                  .filter(t => t.target_type !== 'pond' || t.target_id === selectedPond)
+                  .map((t) => {
                   const metric = METRICS.find((m) => m.value === t.metric);
-                  const zoneName = t.target_type === 'zone'
-                    ? zones.find((z) => z.id === t.target_id)?.name ?? t.target_id.slice(0, 8)
+                  const targetName = t.target_type === 'pond'
+                    ? (pondName || 'Ao đang chọn')
                     : t.target_id;
                   return (
                     <tr key={t.id} className="hover:bg-gray-50/60 transition-colors">
-                      <td className="px-4 py-3 text-sm text-gray-700 font-medium">{zoneName}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          t.target_type === 'zone' ? 'bg-teal-100 text-teal-700' : 'bg-purple-100 text-purple-700'
-                        }`}>
-                          {t.target_type === 'zone' ? 'Vùng ao' : 'Loại nuôi'}
-                        </span>
-                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700 font-medium">{targetName}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{metric?.label ?? t.metric}</td>
                       <td className="px-4 py-3 text-sm text-blue-700 font-semibold">{t.min_value} {metric?.unit}</td>
                       <td className="px-4 py-3 text-sm text-red-600 font-semibold">{t.max_value} {metric?.unit}</td>
@@ -259,7 +234,7 @@ const ThresholdTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
 
 // ===== TAB 2: ALERT LOGS =====
 
-const AlertLogsTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
+const AlertLogsTab: React.FC<{ selectedPond: string; pondName: string }> = ({ selectedPond, pondName }) => {
   const [logs,      setLogs]      = useState<AlertLog[]>([]);
   const [total,     setTotal]     = useState(0);
   const [page,      setPage]      = useState(1);
@@ -269,13 +244,13 @@ const AlertLogsTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
   const fetchLogs = useCallback(async (p: number) => {
     setIsLoading(true);
     try {
-      const result = await alertService.getAlertLogs({ page: p, limit: LIMIT });
+      const result = await alertService.getAlertLogs({ page: p, limit: LIMIT, pondId: selectedPond });
       setLogs(result.data);
       setTotal(result.total);
       setPage(result.page);
     } catch { toast.error('Không thể tải nhật ký cảnh báo.'); }
     finally { setIsLoading(false); }
-  }, []);
+  }, [selectedPond]);
 
   useEffect(() => { fetchLogs(1); }, [fetchLogs]);
 
@@ -305,7 +280,7 @@ const AlertLogsTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50/60 border-b border-gray-100">
-              {['Thời gian', 'Vùng ao', 'Chỉ số', 'Giá trị', 'Lý do', 'Trạng thái', 'Thao tác'].map((h) => (
+              {['Thời gian', 'Ao nuôi', 'Chỉ số', 'Giá trị', 'Lý do', 'Trạng thái', 'Thao tác'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
               ))}
             </tr>
@@ -328,7 +303,7 @@ const AlertLogsTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
               logs.map((log) => {
                 const st       = STATUS_MAP[log.status];
                 const metric   = METRICS.find((m) => m.value === log.metric);
-                const zoneName = zones.find((z) => z.id === log.zone_id)?.name ?? log.zone_id?.slice(0, 8) ?? '—';
+                const displayPondName = pondName || 'Ao đang chọn';
                 const dt       = new Date(log.created_at);
                 return (
                   <tr key={log.id} className={`hover:bg-gray-50/60 transition-colors ${log.status === 'unread' ? 'bg-red-50/30' : ''}`}>
@@ -336,7 +311,7 @@ const AlertLogsTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
                       <p className="font-medium text-gray-700">{dt.toLocaleDateString('vi-VN')}</p>
                       <p>{dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{zoneName}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{displayPondName}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{metric?.label ?? log.metric}</td>
                     <td className="px-4 py-3 text-sm font-bold text-red-600">{log.recorded_value} {metric?.unit}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 max-w-[180px] truncate" title={log.reason}>{log.reason}</td>
@@ -390,12 +365,12 @@ const AlertLogsTab: React.FC<{ zones: Zone[] }> = ({ zones }) => {
 type Tab = 'thresholds' | 'logs';
 
 export const AlertsPage: React.FC = () => {
-  const [tab,   setTab]   = useState<Tab>('thresholds');
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [unread, setUnread] = useState(0);
+  const [tab,              setTab]              = useState<Tab>('thresholds');
+  const [selectedPond,     setSelectedPond]     = useState<string>('');
+  const [selectedPondName, setSelectedPondName] = useState<string>('');
+  const [unread,           setUnread]           = useState(0);
 
   useEffect(() => {
-    zoneService.getZones().then(setZones).catch(() => null);
     alertService.getUnreadCount().then(setUnread).catch(() => null);
   }, []);
 
@@ -407,7 +382,7 @@ export const AlertsPage: React.FC = () => {
   return (
     <div className="space-y-5">
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-gray-900 text-xl font-bold flex items-center gap-2">
             <Bell size={20} className="text-red-500" />
@@ -417,39 +392,77 @@ export const AlertsPage: React.FC = () => {
             Quản lý ngưỡng cảnh báo (UC15) và nhật ký sự kiện (UC16)
           </p>
         </div>
-        {unread > 0 && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-xl">
-            <ShieldAlert size={15} className="text-red-500" />
-            <span className="text-red-700 text-sm font-semibold">{unread} cảnh báo chưa xử lý</span>
+        <div className="flex items-center gap-4">
+          {unread > 0 && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-xl">
+              <ShieldAlert size={15} className="text-red-500" />
+              <span className="text-red-700 text-sm font-semibold">{unread} cảnh báo chưa xử lý</span>
+            </div>
+          )}
+          <ZonePondSelector
+            onPondSelect={setSelectedPond}
+            onPondNameSelect={setSelectedPondName}
+          />
+        </div>
+      </div>
+
+      {!selectedPond ? (
+        <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border-2 border-dashed border-slate-200 text-slate-400">
+          <ShieldAlert size={64} className="mb-4 opacity-20" />
+          <h3 className="text-xl font-bold text-slate-500">
+            Chưa chọn ao nuôi
+          </h3>
+          <p>Vui lòng chọn Vùng và Ao để xem cảnh báo và thiết lập ngưỡng.</p>
+        </div>
+      ) : (
+        <>
+          {/* Summary Row */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {[
+              { label: 'Chưa xử lý', value: unread, color: 'text-red-700', bg: 'bg-red-50', icon: <AlertTriangle size={20} /> },
+              { label: 'Ao đang chọn', value: selectedPondName || '—', color: 'text-teal-700', bg: 'bg-teal-50', icon: <Fish size={20} /> },
+              { label: 'Thiết lập', value: '—', color: 'text-amber-700', bg: 'bg-amber-50', icon: <Settings size={20} /> },
+            ].map((s) => (
+              <div key={s.label} className={`${s.bg} rounded-xl p-4 flex items-center gap-3`}>
+                <div className={`${s.color} opacity-70`}>{s.icon}</div>
+                <div>
+                  <p className={`${s.color} text-xl font-bold leading-tight`}>{s.value}</p>
+                  <p className="text-gray-500 text-xs mt-0.5">{s.label}</p>
+                </div>
+              </div>
+            ))}
           </div>
-        )}
-      </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              tab === t.key
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {t.icon}
-            {t.label}
-            {t.key === 'logs' && unread > 0 && (
-              <span className="bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">
-                {unread > 9 ? '9+' : unread}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+          {/* Tab bar */}
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  tab === t.key
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {t.icon}
+                {t.label}
+                {t.key === 'logs' && unread > 0 && (
+                  <span className="bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">
+                    {unread > 9 ? '9+' : unread}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
 
-      {/* Tab content */}
-      {tab === 'thresholds' ? <ThresholdTab zones={zones} /> : <AlertLogsTab zones={zones} />}
+          {/* Tab content */}
+          {tab === 'thresholds'
+            ? <ThresholdTab selectedPond={selectedPond} pondName={selectedPondName} />
+            : <AlertLogsTab  selectedPond={selectedPond} pondName={selectedPondName} />
+          }
+        </>
+      )}
     </div>
   );
 };

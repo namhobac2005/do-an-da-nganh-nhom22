@@ -2,6 +2,7 @@ import axios from "axios";
 import mqtt from "mqtt";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
+import { evaluateSensorData } from "./alert.service.ts";
 
 dotenv.config();
 
@@ -47,18 +48,43 @@ export const initMQTT = async () => {
     // 1. KIỂM TRA VÀ GHI DỮ LIỆU SENSOR
     const { data: sensor } = await supabase
       .from("sensors")
-      .select("id")
+      .select("id, type, pond_id")
       .eq("feed_key", feedKey)
       .maybeSingle();
 
     if (sensor) {
+      const numericValue = parseFloat(value);
+
       await supabase.from("sensor_data").insert([
         {
           sensor_id: sensor.id,
-          value: parseFloat(value),
+          value: numericValue,
         },
       ]);
       console.log(`Đã ghi dữ liệu cảm biến ${feedKey}`);
+
+      // ⚡ ĐÁNH GIÁ NGƯỠNG CẢNH BÁO — The Missing Link
+      if (sensor.pond_id && sensor.type) {
+        try {
+          const alert = await evaluateSensorData(
+            sensor.pond_id,
+            null,
+            sensor.type,
+            numericValue,
+          );
+          if (alert) {
+            console.log(
+              `🚨 CẢNH BÁO: ${sensor.type} = ${numericValue} tại ao ${sensor.pond_id} — ${alert.reason}`,
+            );
+          }
+        } catch (err: any) {
+          console.error(
+            `❌ Lỗi kiểm tra ngưỡng cho ${feedKey}:`,
+            err.message,
+          );
+        }
+      }
+
       return;
     }
 
@@ -129,10 +155,10 @@ export const initMQTT = async () => {
  * ĐỒNG BỘ DỮ LIỆU CŨ/CÓ SẴN (HTTP API)
  */
 export const syncAllDataFromAdafruit = async () => {
-  // 1. Lấy tất cả cảm biến (nên filter thêm để tránh lấy null feed_key)
+  // 1. Lấy tất cả cảm biến (bao gồm type và pond_id để đánh giá ngưỡng)
   const { data: dbSensors } = await supabase
     .from("sensors")
-    .select("id, feed_key")
+    .select("id, feed_key, type, pond_id")
     .not("feed_key", "is", null);
 
   if (!dbSensors || dbSensors.length === 0) return;
@@ -153,6 +179,8 @@ export const syncAllDataFromAdafruit = async () => {
   console.log(`🔄 Bắt đầu đồng bộ toàn hệ thống lúc: ${displayTime}`);
 
   const dataToInsert = [];
+  // Lưu thông tin sensor để đánh giá ngưỡng sau khi insert
+  const sensorReadings: { pond_id: string; type: string; value: number }[] = [];
 
   for (const sensor of dbSensors) {
     try {
@@ -162,11 +190,21 @@ export const syncAllDataFromAdafruit = async () => {
       );
 
       if (response.data && response.data.value !== undefined) {
+        const numericValue = parseFloat(response.data.value);
         dataToInsert.push({
           sensor_id: sensor.id,
-          value: parseFloat(response.data.value),
+          value: numericValue,
           timestamp: vnTimestamp, // TẤT CẢ SENSOR DÙNG CHUNG 1 TIMESTAMP NÀY
         });
+
+        // Ghi nhận để đánh giá ngưỡng
+        if (sensor.pond_id && sensor.type) {
+          sensorReadings.push({
+            pond_id: sensor.pond_id,
+            type: sensor.type,
+            value: numericValue,
+          });
+        }
       }
     } catch (err: any) {
       console.error(`❌ Lỗi feed ${sensor.feed_key}: ${err.message}`);
@@ -183,6 +221,25 @@ export const syncAllDataFromAdafruit = async () => {
       console.log(
         `✅ Thành công! Đã gộp ${dataToInsert.length} sensor vào mốc ${displayTime}`,
       );
+
+      // ⚡ ĐÁNH GIÁ NGƯỠNG CHO TẤT CẢ SENSOR ĐÃ ĐỒNG BỘ
+      for (const reading of sensorReadings) {
+        try {
+          const alert = await evaluateSensorData(
+            reading.pond_id,
+            null,
+            reading.type,
+            reading.value,
+          );
+          if (alert) {
+            console.log(
+              `🚨 CẢNH BÁO (sync): ${reading.type} = ${reading.value} tại ao ${reading.pond_id} — ${alert.reason}`,
+            );
+          }
+        } catch (err: any) {
+          console.error(`❌ Lỗi kiểm tra ngưỡng (sync):`, err.message);
+        }
+      }
     }
   }
 };
@@ -201,3 +258,4 @@ export const startIoTSystem = async () => {
     await syncAllDataFromAdafruit();
   }, SYNC_INTERVAL);
 };
+

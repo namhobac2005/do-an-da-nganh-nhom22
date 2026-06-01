@@ -29,16 +29,16 @@ import {
 } from 'lucide-react';
 import * as alertService from '../../services/alertService';
 import { ZonePondSelector } from '../../components/common/ZonePondSelector';
-import type { Threshold, AlertLog, Metric, TargetType } from '../../services/alertService';
+import type { Threshold, AlertLog, Metric } from '../../services/alertService';
 
 // ===== TYPES =====
 
 // ===== CONSTANTS =====
 
 const METRICS: { value: Metric; label: string; unit: string }[] = [
-  { value: 'pH',          label: 'pH',                  unit: '' },
+  { value: 'light',       label: 'Ánh sáng',            unit: 'lux' },
   { value: 'temperature', label: 'Nhiệt độ',            unit: '°C' },
-  { value: 'DO',          label: 'Ô xy hoà tan (DO)',   unit: 'mg/L' },
+  { value: 'water_level', label: 'Mực nước',            unit: 'cm' },
 ];
 
 const STATUS_MAP = {
@@ -49,8 +49,6 @@ const STATUS_MAP = {
 // ===== TAB 1: THRESHOLD SETTINGS =====
 
 interface ThresholdFormValues {
-  target_type: TargetType;
-  target_id:   string;
   metric:      Metric;
   min_value:   string;
   max_value:   string;
@@ -72,10 +70,9 @@ const ThresholdTab: React.FC<{ selectedPond: string; pondName: string }> = ({ se
 
   const { register, handleSubmit, watch, formState: { errors }, reset } =
     useForm<ThresholdFormValues>({
-      defaultValues: { target_type: 'pond', target_id: '', metric: 'pH', min_value: '', max_value: '' },
+      defaultValues: { metric: 'light', min_value: '', max_value: '' },
     });
 
-  const targetType = watch('target_type');
   const minVal     = watch('min_value');
   const maxVal     = watch('max_value');
   const minMaxErr  = minVal && maxVal && Number(minVal) >= Number(maxVal);
@@ -85,8 +82,8 @@ const ThresholdTab: React.FC<{ selectedPond: string; pondName: string }> = ({ se
     setIsSubmitting(true);
     try {
       const saved = await alertService.upsertThreshold({
-        target_type: vals.target_type,
-        target_id:   vals.target_type === 'pond' ? selectedPond : vals.target_id,
+        target_type: 'pond',
+        target_id:   selectedPond,
         metric:      vals.metric,
         min_value:   Number(vals.min_value),
         max_value:   Number(vals.max_value),
@@ -128,36 +125,15 @@ const ThresholdTab: React.FC<{ selectedPond: string; pondName: string }> = ({ se
           Thêm / cập nhật ngưỡng cảnh báo
         </h2>
         <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Target type */}
+          {/* Ao nuôi đang chọn */}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Áp dụng cho</label>
-            <select {...register('target_type')} className={inputCls()}>
-              <option value="pond">Ao nuôi cụ thể</option>
-              <option value="farming_type">Loại nuôi</option>
-            </select>
-          </div>
-
-          {/* Target id — cascading pond selector or text input */}
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">
-              {targetType === 'pond' ? 'Chọn ao nuôi' : 'Nhập loại nuôi'}
-              <span className="text-red-500 ml-0.5">*</span>
-            </label>
-            {targetType === 'pond' ? (
-              <input
-                type="text"
-                disabled
-                value={pondName || 'Chọn ao ở phần trên'}
-                className={inputCls()}
-              />
-            ) : (
-              <input
-                {...register('target_id', { required: 'Vui lòng nhập loại nuôi.' })}
-                placeholder="VD: Tôm thẻ chân trắng"
-                className={inputCls(!!errors.target_id)}
-              />
-            )}
-            {errors.target_id && <p className="text-red-500 text-xs mt-1">{errors.target_id.message}</p>}
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Ao nuôi</label>
+            <input
+              type="text"
+              disabled
+              value={pondName || 'Chọn ao ở phần trên'}
+              className={inputCls()}
+            />
           </div>
 
           {/* Metric */}
@@ -224,7 +200,7 @@ const ThresholdTab: React.FC<{ selectedPond: string; pondName: string }> = ({ se
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50/60 border-b border-gray-100">
-                {['Đối tượng', 'Loại', 'Chỉ số', 'Ngưỡng dưới', 'Ngưỡng trên', ''].map((h) => (
+                {['Ao nuôi', 'Chỉ số', 'Ngưỡng dưới', 'Ngưỡng trên', ''].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -232,12 +208,12 @@ const ThresholdTab: React.FC<{ selectedPond: string; pondName: string }> = ({ se
             <tbody className="divide-y divide-gray-50">
               {isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
-                  <tr key={i}>{Array.from({ length: 6 }).map((__, j) => (
+                  <tr key={i}>{Array.from({ length: 5 }).map((__, j) => (
                     <td key={j} className="px-4 py-3"><div className="h-4 bg-gray-100 rounded animate-pulse" /></td>
                   ))}</tr>
                 ))
               ) : thresholds.length === 0 ? (
-                <tr><td colSpan={6} className="py-12 text-center text-gray-400 text-sm">Chưa có ngưỡng nào được thiết lập.</td></tr>
+                <tr><td colSpan={5} className="py-12 text-center text-gray-400 text-sm">Chưa có ngưỡng nào được thiết lập.</td></tr>
               ) : (
                 thresholds
                   .filter(t => t.target_type !== 'pond' || t.target_id === selectedPond)
@@ -249,13 +225,6 @@ const ThresholdTab: React.FC<{ selectedPond: string; pondName: string }> = ({ se
                   return (
                     <tr key={t.id} className="hover:bg-gray-50/60 transition-colors">
                       <td className="px-4 py-3 text-sm text-gray-700 font-medium">{targetName}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          t.target_type === 'pond' ? 'bg-teal-100 text-teal-700' : 'bg-purple-100 text-purple-700'
-                        }`}>
-                          {t.target_type === 'pond' ? 'Ao nuôi' : 'Loại nuôi'}
-                        </span>
-                      </td>
                       <td className="px-4 py-3 text-sm text-gray-600">{metric?.label ?? t.metric}</td>
                       <td className="px-4 py-3 text-sm text-blue-700 font-semibold">{t.min_value} {metric?.unit}</td>
                       <td className="px-4 py-3 text-sm text-red-600 font-semibold">{t.max_value} {metric?.unit}</td>

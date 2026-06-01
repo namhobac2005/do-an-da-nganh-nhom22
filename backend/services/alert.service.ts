@@ -18,7 +18,7 @@ import { alertEmitter, type AlertTriggeredPayload } from '../lib/alert.events.ts
 // ===== TYPES =====
 
 export type TargetType = 'pond' | 'farming_type';
-export type Metric = 'pH' | 'temperature' | 'DO';
+export type Metric = 'light' | 'temperature' | 'water_level';
 
 export interface Threshold {
   id: string;
@@ -186,55 +186,35 @@ export const resolveAlert = async (id: string): Promise<AlertLog> => {
   return data as AlertLog;
 };
 
-// ===== CORE ENGINE: evaluateSensorData() =====
-
 /**
- * Called by the Sensor module after each reading is persisted.
- * Checks the value against all applicable thresholds (zone-specific first,
- * then farming_type-level), inserts an alert_log if out of range,
+ * Called by the MQTT/Sensor module after each reading is persisted.
+ * Checks the value against the pond-specific threshold,
+ * inserts an alert_log if out of range,
  * and emits 'ALERT_TRIGGERED' for the Actuator module to react to.
  *
  * Hook point for Sensor module:
  *   import { evaluateSensorData } from '../services/alert.service.ts';
- *   await evaluateSensorData(zoneId, farmingType, 'pH', 7.8);
+ *   await evaluateSensorData(pondId, null, 'temperature', 32.5);
  *
- * @param zoneId       UUID of the pond the sensor belongs to
- * @param farmingType  Farming type label (e.g. "Tôm thẻ chân trắng"), or null
- * @param metric       'pH' | 'temperature' | 'DO'
- * @param value        The sensor reading
+ * @param pondId        UUID of the pond the sensor belongs to
+ * @param _farmingType  Deprecated — kept for API compat, not used
+ * @param metric        Sensor type string (e.g. 'light', 'temperature', 'water_level')
+ * @param value         The sensor reading
  */
 export const evaluateSensorData = async (
-  zoneId: string,
-  farmingType: string | null,
-  metric: Metric,
+  pondId: string,
+  _farmingType: string | null,
+  metric: string,
   value: number
 ): Promise<AlertLog | null> => {
-  // 1. Find the most specific applicable threshold (zone > farming_type)
-  let threshold: Threshold | null = null;
-
-  // Try pond-specific first
-  const { data: zoneThreshold } = await supabaseAdmin
+  // 1. Find the pond-specific threshold for this metric
+  const { data: threshold } = await supabaseAdmin
     .from('thresholds')
     .select('*')
     .eq('target_type', 'pond')
-    .eq('target_id', zoneId)
+    .eq('target_id', pondId)
     .eq('metric', metric)
     .maybeSingle();
-
-  if (zoneThreshold) {
-    threshold = zoneThreshold as Threshold;
-  } else if (farmingType) {
-    // Fall back to farming_type level
-    const { data: typeThreshold } = await supabaseAdmin
-      .from('thresholds')
-      .select('*')
-      .eq('target_type', 'farming_type')
-      .eq('target_id', farmingType)
-      .eq('metric', metric)
-      .maybeSingle();
-
-    if (typeThreshold) threshold = typeThreshold as Threshold;
-  }
 
   if (!threshold) return null; // no threshold defined → nothing to check
 
@@ -249,7 +229,7 @@ export const evaluateSensorData = async (
   const { data: alertRow, error } = await supabaseAdmin
     .from('alert_logs')
     .insert({
-      zone_id: zoneId,
+      zone_id: pondId,
       metric: metric,
       recorded_value: value,
       reason: reason,
@@ -268,7 +248,7 @@ export const evaluateSensorData = async (
   // 4. Emit event for Actuator module to subscribe to
   const payload: AlertTriggeredPayload = {
     alertId: alert.id,
-    zoneId: zoneId,
+    zoneId: pondId,
     metric: metric,
     recordedValue: value,
     minValue: threshold.min_value,

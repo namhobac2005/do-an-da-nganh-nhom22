@@ -8,7 +8,7 @@ import { api } from './api';
 // ===== TYPES =====
 
 export type TargetType = 'pond' | 'farming_type';
-export type Metric     = 'pH' | 'temperature' | 'DO';
+export type Metric     = 'light' | 'temperature' | 'water_level';
 export type AlertStatus = 'unread' | 'resolved';
 
 export interface Threshold {
