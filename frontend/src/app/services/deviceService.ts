@@ -193,6 +193,8 @@ export interface Device {
   feed_key: string;
   pond_id?: string;
   zone_id?: string | null;
+  pond_name?: string | null;
+  zone_name?: string | null;
   status: string;
   mode: "auto" | "manual";
   description?: string;
