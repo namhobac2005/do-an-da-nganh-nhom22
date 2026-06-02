@@ -43,6 +43,7 @@ import { Chatbot } from "./pages/chatbot/Chatbot";
 import { ZonesPage } from "./pages/admin/ZonesPage";
 import { PondsByZonePage } from "./pages/admin/PondsByZonePage";
 import { PondDetailPage } from "./pages/admin/PondDetailPage";
+import { SensorsPage } from "./pages/admin/SensorsPage";
 import { DevicesPage } from "./pages/admin/DevicesPage";
 import { UsersPage } from "./pages/admin/UsersPage";
 import { ActivityLogsPage } from "./pages/admin/ActivityLogsPage";
