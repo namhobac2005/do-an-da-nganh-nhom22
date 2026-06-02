@@ -84,31 +84,23 @@ const AccessDenied: React.FC = () => (
 );
 
 export const router = createBrowserRouter([
-  // ===== PUBLIC ROUTES =====
-  {
-    path: "/login",
-    element: <Login />,
-  },
-  {
-    path: "/403",
-    element: <AccessDenied />,
-  },
+  // PUBLIC
+  { path: "/login", element: <Login /> },
+  { path: "/403", element: <AccessDenied /> },
 
-  // ===== PROTECTED ROUTES =====
+  // ✅ PROTECTED: All routes under "/" use PrivateRoute guard
   {
     path: "/",
-    element: <PrivateRoute />,
+    element: <PrivateRoute />,  // ← Auth check happens HERE
     children: [
       {
         element: <MainLayout />,
         children: [
-          // Redirect root → dashboard
+          // ✅ Root redirect: / → /dashboard (only if authenticated)
           { index: true, element: <Navigate to="/dashboard" replace /> },
-
-          // Dashboard
+          
+          // All other routes protected by parent PrivateRoute...
           { path: "dashboard", element: <Dashboard /> },
-
-          // ===== Zone > Pond Hierarchy (All Authenticated Users) =====
           { path: "zones", element: <ZonesPage /> },
           { path: "zones/:zoneId/ponds", element: <PondsByZonePage /> },
           { path: "zones/:zoneId/ponds/:pondId", element: <PondDetailPage /> },
@@ -116,20 +108,7 @@ export const router = createBrowserRouter([
           // Thiết bị của user (lọc theo pond gán trong backend)
           { path: "devices", element: <DevicesPage /> },
 
-          // ===== Admin Only Routes =====
-          {
-            path: "admin",
-            element: <PrivateRoute requiredRole="admin" />,
-            children: [
-              { index: true, element: <Navigate to="/zones" replace /> },
-              { path: "devices", element: <DevicesPage /> },
-              { path: "users", element: <UsersPage /> },
-              { path: "alerts", element: <AlertsPage /> },
-              { path: "logs", element: <ActivityLogsPage /> },
-            ],
-          },
-
-          // ===== Common Routes (All Authenticated Users) =====
+          // ✅ RESTORED: Common routes (all authenticated users)
           { path: "monitoring", element: <MonitoringPage /> },
           { path: "control", element: <DieuKhien /> },
           { path: "device-logs", element: <DeviceLogsPage /> },
@@ -140,12 +119,24 @@ export const router = createBrowserRouter([
             path: "settings",
             element: <PlaceholderPage title="Cài Đặt Hệ Thống" icon="⚙️" />,
           },
+
+          // ✅ Admin-only nested check
+          {
+            path: "admin",
+            element: <PrivateRoute requiredRole="admin" />,
+            children: [
+              { path: "devices", element: <DevicesPage /> },
+              { path: "users", element: <UsersPage /> },
+              { path: "alerts", element: <AlertsPage /> },
+              { path: "logs", element: <ActivityLogsPage /> },
+            ],
+          },
         ],
       },
     ],
   },
-
-  // ===== 404 =====
+  
+  // 404 fallback — placed LAST to catch unmatched routes
   {
     path: "*",
     element: <NotFound />,

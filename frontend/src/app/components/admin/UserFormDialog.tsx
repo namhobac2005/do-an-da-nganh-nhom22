@@ -8,6 +8,7 @@
 import { useEffect, useReducer, useCallback, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Loader2, Eye, EyeOff, MapPin, Shield, User } from 'lucide-react';
+import { toast } from 'sonner';
 import type { UserProfile, CreateUserDto, UpdateUserDto } from '../../types/user.types';
 import * as zoneService from '../../services/zoneService';
 
@@ -153,8 +154,11 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({
         await onSubmit(dto);
         dispatch({ type: 'SUBMIT_END' });
         onClose();
-      } catch (err: any) {
-        dispatch({ type: 'SUBMIT_END', error: err.message });
+      } catch (error: any) {
+        // Capture the error thrown from the backend with multiple fallbacks
+        const errorMessage = error.response?.data?.message || error.message || "Có lỗi xảy ra";
+        toast.error(errorMessage);  // ← Displays "Đã có người quản lý" to admin
+        dispatch({ type: 'SUBMIT_END', error: errorMessage });
       }
     },
     [state, isEdit, onSubmit, onClose]

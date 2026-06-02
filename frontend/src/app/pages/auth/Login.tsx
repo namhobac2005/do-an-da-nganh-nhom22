@@ -14,8 +14,8 @@ export const Login: React.FC = () => {
   const location = useLocation();
   const { login, isLoading, error, isAuthenticated, clearError } = useAuth();
 
-  const [email, setEmail] = useState('admin@aquaculture.vn');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // Nếu đã đăng nhập, redirect về dashboard
@@ -184,23 +184,23 @@ export const Login: React.FC = () => {
                 <button
                   onClick={() => {
                     setEmail('admin@aquasmart.vn');
-                    setPassword('Admin@123');
+                    setPassword('12345678');
                   }}
                   className="w-full text-left px-3 py-1.5 rounded-lg bg-white hover:bg-blue-50 border border-blue-100 transition-colors"
                 >
                   <p className="text-blue-700" style={{ fontSize: '12px' }}>
-                    👑 <strong>Admin:</strong> admin@aquasmart.vn / Admin@123
+                    👑 <strong>Admin:</strong> admin@aquasmart.vn / 12345678
                   </p>
                 </button>
                 <button
                   onClick={() => {
-                    setEmail('mai.tran@aquasmart.vn');
-                    setPassword('User@123');
+                    setEmail('user10@aquasmart.vn');
+                    setPassword('12345678');
                   }}
                   className="w-full text-left px-3 py-1.5 rounded-lg bg-white hover:bg-blue-50 border border-blue-100 transition-colors"
                 >
                   <p className="text-blue-700" style={{ fontSize: '12px' }}>
-                    👤 <strong>User:</strong> mai.tran@aquasmart.vn / User@123
+                    👤 <strong>User:</strong> user10@aquasmart.vn / 12345678
                   </p>
                 </button>
               </div>

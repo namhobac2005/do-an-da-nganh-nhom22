@@ -180,25 +180,35 @@ export const updateUserPonds = async (
   userId: string,
   pondIds: string[]
 ): Promise<void> => {
-  // Replace all pond assignments atomically for the current user
+  // 1. PRE-VALIDATION CHECK: Query for ponds assigned to OTHER users
+  const { data: existingAssignments, error: checkError } = await supabaseAdmin
+    .from('user_ponds')
+    .select('pond_id, user_id')
+    .in('pond_id', pondIds)
+    .neq('user_id', userId);
+
+  if (checkError) throw checkError;
+
+  // 2. BLOCK ACTION IF ALREADY ASSIGNED TO SOMEONE ELSE
+  if (existingAssignments && existingAssignments.length > 0) {
+    throw new Error("Đã có người quản lý");  // ← Exact error message
+  }
+
+  // 3. ONLY PROCEED IF VALIDATION PASSES: Delete old assignments
   const { error: deleteErr } = await supabaseAdmin
     .from('user_ponds')
     .delete()
     .eq('user_id', userId);
 
-  if (deleteErr) throw new Error(deleteErr.message);
+  if (deleteErr) throw deleteErr;
 
-  if (pondIds.length === 0) return;
+  // 4. INSERT new pond assignments
+  if (pondIds.length > 0) {
+    const insertData = pondIds.map((pondId) => ({ user_id: userId, pond_id: pondId }));
+    const { error: insertErr } = await supabaseAdmin
+      .from('user_ponds')
+      .insert(insertData);
 
-  // STRICT RULE: 1 Pond = 1 User. Steal ownership from any other users.
-  const { error: stealErr } = await supabaseAdmin
-    .from('user_ponds')
-    .delete()
-    .in('pond_id', pondIds);
-
-  if (stealErr) throw new Error(stealErr.message);
-
-  const rows = pondIds.map((pondId) => ({ user_id: userId, pond_id: pondId }));
-  const { error: insertErr } = await supabaseAdmin.from('user_ponds').insert(rows);
-  if (insertErr) throw new Error(insertErr.message);
+    if (insertErr) throw insertErr;
+  }
 };

@@ -38,7 +38,7 @@ import type { Threshold, AlertLog, Metric } from '../../services/alertService';
 // ===== CONSTANTS =====
 
 const METRICS: { value: Metric; label: string; unit: string }[] = [
-  { value: 'light',       label: 'Ánh sáng',            unit: 'lux' },
+  { value: 'light',       label: 'Ánh sáng',            unit: '%' },
   { value: 'temperature', label: 'Nhiệt độ',            unit: '°C' },
   { value: 'water_level', label: 'Mực nước',            unit: 'cm' },
 ];
