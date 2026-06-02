@@ -270,6 +270,8 @@ const AlertLogsTab: React.FC<{ selectedPond: string; pondName: string; onUnreadC
   const LIMIT = 20;
   const pageRef = useRef(1);
 
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'created_at', direction: 'desc' });
+
   const fetchLogs = useCallback(async (p: number) => {
     setIsLoading(true);
     try {
@@ -329,6 +331,26 @@ const AlertLogsTab: React.FC<{ selectedPond: string; pondName: string; onUnreadC
     } catch (err: any) { toast.error(err.message); }
   };
 
+  const handleSortStatus = () => {
+    if (sortConfig.key === 'created_at') {
+      setSortConfig({ key: 'status', direction: 'asc' }); // unread first
+    } else if (sortConfig.direction === 'asc') {
+      setSortConfig({ key: 'status', direction: 'desc' }); // resolved first
+    } else {
+      setSortConfig({ key: 'created_at', direction: 'desc' }); // default
+    }
+  };
+
+  const sortedLogs = [...logs].sort((a, b) => {
+    if (sortConfig.key === 'status') {
+      const orderA = a.status === 'unread' ? 1 : 2;
+      const orderB = b.status === 'unread' ? 1 : 2;
+      const diff = sortConfig.direction === 'asc' ? orderA - orderB : orderB - orderA;
+      if (diff !== 0) return diff;
+    }
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
   return (
@@ -352,9 +374,19 @@ const AlertLogsTab: React.FC<{ selectedPond: string; pondName: string; onUnreadC
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50/60 border-b border-gray-100">
-              {['Thời gian', 'Vùng', 'Ao nuôi', 'Chỉ số', 'Giá trị', 'Lý do', 'Trạng thái', 'Thao tác'].map((h) => (
+              {['Thời gian', 'Vùng', 'Ao nuôi', 'Chỉ số', 'Giá trị', 'Lý do'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
               ))}
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors" onClick={handleSortStatus}>
+                <div className="flex items-center gap-1">
+                  Trạng thái
+                  <div className="flex flex-col">
+                    <span className={`text-[8px] leading-[8px] ${sortConfig.key === 'status' && sortConfig.direction === 'desc' ? 'text-gray-300' : 'text-gray-500'}`}>▲</span>
+                    <span className={`text-[8px] leading-[8px] ${sortConfig.key === 'status' && sortConfig.direction === 'asc' ? 'text-gray-300' : 'text-gray-500'}`}>▼</span>
+                  </div>
+                </div>
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Thao tác</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -364,7 +396,7 @@ const AlertLogsTab: React.FC<{ selectedPond: string; pondName: string; onUnreadC
                   <td key={j} className="px-4 py-3"><div className="h-4 bg-gray-100 rounded animate-pulse" /></td>
                 ))}</tr>
               ))
-            ) : logs.length === 0 ? (
+            ) : sortedLogs.length === 0 ? (
               <tr>
                 <td colSpan={8} className="py-16 text-center">
                   <Bell size={28} className="mx-auto mb-2 text-gray-200" />
@@ -372,7 +404,7 @@ const AlertLogsTab: React.FC<{ selectedPond: string; pondName: string; onUnreadC
                 </td>
               </tr>
             ) : (
-              logs.map((log) => {
+              sortedLogs.map((log) => {
                 const st       = STATUS_MAP[log.status];
                 const metric   = METRICS.find((m) => m.value === log.metric);
                 const dt       = new Date(log.created_at);

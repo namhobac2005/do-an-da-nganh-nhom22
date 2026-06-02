@@ -16,15 +16,20 @@ import {
   LayoutDashboard, Cpu, Bell, Activity, AlertCircle,
   Loader2, Users,
 } from 'lucide-react';
-import * as zoneService from '../../services/zoneService';
 import type { PondDetail } from '../../types/user.types';
+import * as zoneService from '../../services/zoneService';
+import * as alertService from '../../services/alertService';
+import * as deviceService from '../../services/deviceService';
+import * as sensorService from '../../services/sensorService';
+import { ShieldAlert, Droplets, Sun, ThermometerSun, Zap, Trash2, CheckCircle2 } from 'lucide-react';
 
-// ===== STATUS CONFIG =====
 const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string }> = {
   active:      { label: 'Hoạt động', bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500' },
   inactive:    { label: 'Ngưng HĐ',  bg: 'bg-gray-100',    text: 'text-gray-600',    dot: 'bg-gray-400' },
   maintenance: { label: 'Bảo trì',   bg: 'bg-amber-100',   text: 'text-amber-700',   dot: 'bg-amber-500' },
 };
+// ===== TAB CONTENT =====
+
 
 // ===== TAB DEFINITIONS =====
 type TabKey = 'dashboard' | 'devices' | 'alerts';
@@ -34,53 +39,160 @@ const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'alerts',    label: 'Cảnh báo',   icon: <Bell size={16} /> },
 ];
 
-// ===== PLACEHOLDER TAB CONTENT =====
-// These will be replaced with real sub-components as they are developed.
+const DashboardTab: React.FC<{ pondId: string }> = ({ pondId }) => {
+  const [sensors, setSensors] = useState<sensorService.SensorData[]>([]);
+  const [loading, setLoading] = useState(true);
 
-const DashboardTab: React.FC<{ pondId: string }> = ({ pondId }) => (
-  <div className="bg-white rounded-2xl border border-gray-100 p-8">
-    <div className="flex flex-col items-center text-center py-8">
-      <LayoutDashboard size={40} className="text-blue-200 mb-4" />
-      <h3 className="text-gray-700 font-semibold text-base mb-2">Dashboard Ao Nuôi</h3>
-      <p className="text-gray-400 text-sm max-w-md">
-        Hiển thị dữ liệu cảm biến thời gian thực, biểu đồ nhiệt độ, pH, DO cho ao <strong>{pondId}</strong>.
-      </p>
-      <p className="text-blue-500 text-xs mt-4 bg-blue-50 px-3 py-1.5 rounded-lg font-medium">
-        Mô-đun này sẽ hiển thị dữ liệu thực từ Adafruit IO
-      </p>
-    </div>
-  </div>
-);
+  useEffect(() => {
+    sensorService.getLatestSensors(pondId)
+      .then(setSensors)
+      .catch(() => setSensors([]))
+      .finally(() => setLoading(false));
+  }, [pondId]);
 
-const DevicesTab: React.FC<{ pondId: string }> = ({ pondId }) => (
-  <div className="bg-white rounded-2xl border border-gray-100 p-8">
-    <div className="flex flex-col items-center text-center py-8">
-      <Cpu size={40} className="text-purple-200 mb-4" />
-      <h3 className="text-gray-700 font-semibold text-base mb-2">Thiết bị trong Ao</h3>
-      <p className="text-gray-400 text-sm max-w-md">
-        Quản lý máy bơm, sục khí, máy cho ăn trong ao <strong>{pondId}</strong>.
-      </p>
-      <p className="text-purple-500 text-xs mt-4 bg-purple-50 px-3 py-1.5 rounded-lg font-medium">
-        Mô-đun này sẽ hiển thị và điều khiển các thiết bị IoT
-      </p>
-    </div>
-  </div>
-);
+  if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-emerald-500" /></div>;
 
-const AlertsTab: React.FC<{ pondId: string }> = ({ pondId }) => (
-  <div className="bg-white rounded-2xl border border-gray-100 p-8">
-    <div className="flex flex-col items-center text-center py-8">
-      <Bell size={40} className="text-amber-200 mb-4" />
-      <h3 className="text-gray-700 font-semibold text-base mb-2">Cảnh báo Ao Nuôi</h3>
-      <p className="text-gray-400 text-sm max-w-md">
-        Danh sách cảnh báo ngưỡng pH, nhiệt độ, oxy cho ao <strong>{pondId}</strong>.
-      </p>
-      <p className="text-amber-500 text-xs mt-4 bg-amber-50 px-3 py-1.5 rounded-lg font-medium">
-        Mô-đun này sẽ hiển thị cảnh báo từ hệ thống ngưỡng
-      </p>
+  if (sensors.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-100 p-8 flex flex-col items-center justify-center">
+        <LayoutDashboard size={40} className="text-gray-200 mb-3" />
+        <p className="text-gray-400 font-medium">Chưa có dữ liệu</p>
+      </div>
+    );
+  }
+
+  const getIcon = (type: string) => {
+    if (type.toLowerCase().includes('nhiệt độ')) return <ThermometerSun size={20} className="text-orange-500" />;
+    if (type.toLowerCase().includes('sáng')) return <Sun size={20} className="text-amber-500" />;
+    return <Droplets size={20} className="text-blue-500" />;
+  };
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {sensors.map(s => (
+        <div key={s.id} className="bg-white p-5 rounded-2xl border border-gray-100 flex items-center gap-4 shadow-sm">
+          <div className="p-3 bg-gray-50 rounded-xl">{getIcon(s.type)}</div>
+          <div>
+            <p className="text-sm text-gray-500 font-medium">{s.name}</p>
+            <p className="text-2xl font-bold text-gray-800">{s.value} <span className="text-sm font-normal text-gray-500">{s.unit}</span></p>
+          </div>
+        </div>
+      ))}
     </div>
-  </div>
-);
+  );
+};
+
+const DevicesTab: React.FC<{ pondId: string }> = ({ pondId }) => {
+  const [devices, setDevices] = useState<deviceService.Device[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    deviceService.getAllDevices()
+      .then(res => setDevices(res
+        .filter(d => d.pond_id === pondId)
+        .map(d => ({ ...d, status: ((d as any).status ?? 'OFF') } as deviceService.Device))
+      ))
+      .catch(() => setDevices([]))
+      .finally(() => setLoading(false));
+  }, [pondId]);
+
+  if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-emerald-500" /></div>;
+
+  if (devices.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-100 p-8 flex flex-col items-center justify-center">
+        <Cpu size={40} className="text-gray-200 mb-3" />
+        <p className="text-gray-400 font-medium">Chưa có dữ liệu</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <table className="w-full text-left border-collapse">
+        <thead>
+          <tr className="bg-gray-50 text-gray-500 text-xs uppercase font-semibold">
+            <th className="p-4">Tên thiết bị</th>
+            <th className="p-4">Loại</th>
+            <th className="p-4">Trạng thái</th>
+            <th className="p-4">Chế độ</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {devices.map(d => (
+            <tr key={d.id} className="hover:bg-gray-50/50">
+              <td className="p-4 font-medium text-gray-800">{d.name}</td>
+              <td className="p-4 text-sm text-gray-600">{d.type}</td>
+              <td className="p-4">
+                <span className={`px-2 py-1 rounded-md text-xs font-semibold ${d.status === 'ON' || d.status === '1' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-700'}`}>
+                  {d.status === 'ON' || d.status === '1' ? 'Đang bật' : 'Đang tắt'}
+                </span>
+              </td>
+              <td className="p-4 text-sm text-gray-600">{d.mode === 'auto' ? 'Tự động' : 'Thủ công'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+const AlertsTab: React.FC<{ pondId: string }> = ({ pondId }) => {
+  const [logs, setLogs] = useState<alertService.AlertLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    alertService.getAlertLogs({ zoneId: pondId, limit: 5 })
+      .then(res => setLogs(res.data))
+      .catch(() => setLogs([]))
+      .finally(() => setLoading(false));
+  }, [pondId]);
+
+  if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-emerald-500" /></div>;
+
+  if (logs.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-100 p-8 flex flex-col items-center justify-center">
+        <ShieldAlert size={40} className="text-gray-200 mb-3" />
+        <p className="text-gray-400 font-medium">Chưa có dữ liệu</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <table className="w-full text-left border-collapse">
+        <thead>
+          <tr className="bg-gray-50 text-gray-500 text-xs uppercase font-semibold">
+            <th className="p-4">Thời gian</th>
+            <th className="p-4">Chỉ số</th>
+            <th className="p-4">Giá trị</th>
+            <th className="p-4">Trạng thái</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {logs.map(log => {
+            const dt = new Date(log.created_at);
+            return (
+              <tr key={log.id} className="hover:bg-gray-50/50">
+                <td className="p-4 text-sm text-gray-600">
+                  {dt.toLocaleDateString('vi-VN')} {dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                </td>
+                <td className="p-4 text-sm font-medium text-gray-700">{log.metric}</td>
+                <td className="p-4 text-sm text-red-600 font-bold">{log.recorded_value}</td>
+                <td className="p-4">
+                  <span className={`px-2 py-1 rounded-md text-xs font-semibold ${log.status === 'unread' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                    {log.status === 'unread' ? 'Chưa xử lý' : 'Đã xử lý'}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
 const TAB_COMPONENTS: Record<TabKey, React.FC<{ pondId: string }>> = {
   dashboard: DashboardTab,
