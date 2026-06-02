@@ -38,6 +38,8 @@ export interface AlertLog {
   reason: string;
   status: 'unread' | 'resolved';
   created_at: string;
+  pond_name?: string;
+  zone_name?: string;
 }
 
 export interface UpsertThresholdDto {
@@ -156,7 +158,31 @@ export const listAlertLogs = async (opts: ListAlertLogsOptions = {}): Promise<Al
   const { data, error, count } = await query;
   if (error) throw new Error(error.message);
 
-  return { data: (data ?? []) as AlertLog[], total: count ?? 0, page, limit };
+  // Enrich with pond + zone names (zone_id actually stores pond IDs)
+  const pondIds = [...new Set((data ?? []).map((r: any) => r.zone_id).filter(Boolean))];
+  let pondMap: Record<string, { pond_name: string; zone_name: string }> = {};
+  if (pondIds.length > 0) {
+    const { data: ponds } = await supabaseAdmin
+      .from('ponds')
+      .select('id, name, zones(name)')
+      .in('id', pondIds);
+    if (ponds) {
+      for (const p of ponds as any[]) {
+        pondMap[p.id] = {
+          pond_name: p.name ?? '',
+          zone_name: p.zones?.name ?? '',
+        };
+      }
+    }
+  }
+
+  const enriched = (data ?? []).map((row: any) => ({
+    ...row,
+    pond_name: pondMap[row.zone_id]?.pond_name ?? '',
+    zone_name: pondMap[row.zone_id]?.zone_name ?? '',
+  }));
+
+  return { data: enriched as AlertLog[], total: count ?? 0, page, limit };
 };
 
 export const countUnread = async (pondIds?: string[]): Promise<number> => {
@@ -224,6 +250,18 @@ export const evaluateSensorData = async (
   if (value > threshold.max_value) reason = `Vượt ngưỡng trên (${threshold.max_value})`;
 
   if (!reason) return null; // within bounds → no alert
+
+  // 2b. De-duplication: skip if last alert for same pond+metric has identical value
+  const { data: lastAlert } = await supabaseAdmin
+    .from('alert_logs')
+    .select('recorded_value')
+    .eq('zone_id', pondId)
+    .eq('metric', metric)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (lastAlert && lastAlert.recorded_value === value) return null;
 
   // 3. Insert alert_log
   const { data: alertRow, error } = await supabaseAdmin

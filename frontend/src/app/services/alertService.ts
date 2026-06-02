@@ -29,6 +29,8 @@ export interface AlertLog {
   reason:         string;
   status:         AlertStatus;
   created_at:     string;
+  pond_name?:     string;
+  zone_name?:     string;
 }
 
 interface UpsertThresholdDto {

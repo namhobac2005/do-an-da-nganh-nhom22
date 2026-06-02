@@ -1,14 +1,17 @@
 /**
  * CanhBao.tsx
  * Module Cảnh Báo & Ngưỡng Thiết Lập (cho tất cả user)
- * - Tab 1: Thiết lập ngưỡng (Threshold) — targets PONDS
- * - Tab 2: Nhật ký cảnh báo (Alert Logs)
+ * - Tab 1: Nhật ký cảnh báo (Alert Logs) — shown by default, auto-refreshes via Realtime
+ * - Tab 2: Thiết lập ngưỡng (Threshold) — requires pond selection
  *
- * Fully connected to the backend API. No mock data.
- * Uses cascading Zone > Pond selector.
+ * Alert logs load immediately on mount WITHOUT requiring a pond selection.
+ * The ZonePondSelector acts as an optional filter + required for threshold setup.
+ * Backend handles role-based filtering via getUserPondIds().
+ *
+ * Realtime: Supabase Realtime subscription auto-refreshes the logs table on INSERT.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import {
@@ -29,9 +32,8 @@ import {
 } from 'lucide-react';
 import * as alertService from '../../services/alertService';
 import { ZonePondSelector } from '../../components/common/ZonePondSelector';
+import { supabase } from '../../lib/supabaseClient';
 import type { Threshold, AlertLog, Metric } from '../../services/alertService';
-
-// ===== TYPES =====
 
 // ===== CONSTANTS =====
 
@@ -115,6 +117,17 @@ const ThresholdTab: React.FC<{ selectedPond: string; pondName: string }> = ({ se
       hasErr ? 'border-red-400 focus:border-red-400 focus:ring-red-100'
              : 'border-gray-200 focus:border-emerald-400 focus:ring-emerald-100'
     }`;
+
+  // If no pond is selected, show a prompt to select one (thresholds require a pond)
+  if (!selectedPond) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">
+        <Settings size={40} className="mb-3 opacity-20" />
+        <h3 className="text-lg font-bold text-slate-500">Chọn ao nuôi để thiết lập ngưỡng</h3>
+        <p className="text-sm mt-1">Vui lòng chọn Vùng → Ao ở phần trên để cấu hình ngưỡng cảnh báo.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -246,33 +259,73 @@ const ThresholdTab: React.FC<{ selectedPond: string; pondName: string }> = ({ se
 };
 
 // ===== TAB 2: ALERT LOGS =====
+// selectedPond is optional — when empty, fetches ALL alerts for this user's assigned ponds
+// Includes Supabase Realtime subscription to auto-refresh on INSERT
 
-const AlertLogsTab: React.FC<{ selectedPond: string; pondName: string }> = ({ selectedPond, pondName }) => {
+const AlertLogsTab: React.FC<{ selectedPond: string; pondName: string; onUnreadChange?: (n: number) => void }> = ({ selectedPond, pondName, onUnreadChange }) => {
   const [logs,      setLogs]      = useState<AlertLog[]>([]);
   const [total,     setTotal]     = useState(0);
   const [page,      setPage]      = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const LIMIT = 20;
+  const pageRef = useRef(1);
 
   const fetchLogs = useCallback(async (p: number) => {
     setIsLoading(true);
     try {
-      // Use pondId to filter logs for the specific selected pond
-      const result = await alertService.getAlertLogs({ page: p, limit: LIMIT, pondId: selectedPond });
+      const params: Parameters<typeof alertService.getAlertLogs>[0] = {
+        page: p,
+        limit: LIMIT,
+      };
+      if (selectedPond) {
+        params.zoneId = selectedPond;
+      }
+      const result = await alertService.getAlertLogs(params);
       setLogs(result.data);
       setTotal(result.total);
       setPage(result.page);
+      pageRef.current = result.page;
     } catch { toast.error('Không thể tải nhật ký cảnh báo.'); }
     finally { setIsLoading(false); }
   }, [selectedPond]);
 
   useEffect(() => { fetchLogs(1); }, [fetchLogs]);
 
+  // Realtime auto-refresh: listen for INSERT on alert_logs
+  useEffect(() => {
+    const channel = supabase
+      .channel('alert-logs-page-refresh')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'alert_logs' },
+        () => {
+          // Re-fetch current page to show latest alerts
+          fetchLogs(pageRef.current);
+          // Update unread count
+          alertService.getUnreadCount().then((n) => onUnreadChange?.(n)).catch(() => null);
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'alert_logs' },
+        () => {
+          // A resolve happened — refresh to update status
+          fetchLogs(pageRef.current);
+          alertService.getUnreadCount().then((n) => onUnreadChange?.(n)).catch(() => null);
+        },
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchLogs, onUnreadChange]);
+
   const handleResolve = async (id: string) => {
     try {
       const updated = await alertService.resolveAlert(id);
       setLogs((prev) => prev.map((l) => l.id === updated.id ? updated : l));
       toast.success('Đã đánh dấu xử lý.');
+      // Refresh unread count
+      alertService.getUnreadCount().then((n) => onUnreadChange?.(n)).catch(() => null);
     } catch (err: any) { toast.error(err.message); }
   };
 
@@ -284,6 +337,11 @@ const AlertLogsTab: React.FC<{ selectedPond: string; pondName: string }> = ({ se
         <h2 className="text-gray-800 text-sm font-semibold flex items-center gap-2">
           <ShieldAlert size={15} className="text-red-500" />
           Nhật ký cảnh báo · {total} bản ghi
+          {selectedPond && pondName && (
+            <span className="text-xs font-normal text-gray-400 ml-1">
+              (lọc: {pondName})
+            </span>
+          )}
         </h2>
         <button onClick={() => fetchLogs(page)} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-50">
           <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
@@ -294,7 +352,7 @@ const AlertLogsTab: React.FC<{ selectedPond: string; pondName: string }> = ({ se
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50/60 border-b border-gray-100">
-              {['Thời gian', 'Ao nuôi', 'Chỉ số', 'Giá trị', 'Lý do', 'Trạng thái', 'Thao tác'].map((h) => (
+              {['Thời gian', 'Vùng', 'Ao nuôi', 'Chỉ số', 'Giá trị', 'Lý do', 'Trạng thái', 'Thao tác'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
               ))}
             </tr>
@@ -302,13 +360,13 @@ const AlertLogsTab: React.FC<{ selectedPond: string; pondName: string }> = ({ se
           <tbody className="divide-y divide-gray-50">
             {isLoading ? (
               Array.from({ length: 6 }).map((_, i) => (
-                <tr key={i}>{Array.from({ length: 7 }).map((__, j) => (
+                <tr key={i}>{Array.from({ length: 8 }).map((__, j) => (
                   <td key={j} className="px-4 py-3"><div className="h-4 bg-gray-100 rounded animate-pulse" /></td>
                 ))}</tr>
               ))
             ) : logs.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-16 text-center">
+                <td colSpan={8} className="py-16 text-center">
                   <Bell size={28} className="mx-auto mb-2 text-gray-200" />
                   <p className="text-gray-400 text-sm">Chưa có cảnh báo nào</p>
                 </td>
@@ -317,7 +375,6 @@ const AlertLogsTab: React.FC<{ selectedPond: string; pondName: string }> = ({ se
               logs.map((log) => {
                 const st       = STATUS_MAP[log.status];
                 const metric   = METRICS.find((m) => m.value === log.metric);
-                const displayPondName = pondName || 'Ao đang chọn';
                 const dt       = new Date(log.created_at);
                 return (
                   <tr key={log.id} className={`hover:bg-gray-50/60 transition-colors ${log.status === 'unread' ? 'bg-red-50/30' : ''}`}>
@@ -325,7 +382,8 @@ const AlertLogsTab: React.FC<{ selectedPond: string; pondName: string }> = ({ se
                       <p className="font-medium text-gray-700">{dt.toLocaleDateString('vi-VN')}</p>
                       <p>{dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{displayPondName}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{log.zone_name || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 font-medium">{log.pond_name || '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{metric?.label ?? log.metric}</td>
                     <td className="px-4 py-3 text-sm font-bold text-red-600">{log.recorded_value} {metric?.unit}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 max-w-[180px] truncate" title={log.reason}>{log.reason}</td>
@@ -421,63 +479,51 @@ export const CanhBao: React.FC = () => {
         </div>
       </div>
 
-      {!selectedPond ? (
-        <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border-2 border-dashed border-slate-200 text-slate-400">
-          <ShieldAlert size={64} className="mb-4 opacity-20" />
-          <h3 className="text-xl font-bold text-slate-500">
-            Chưa chọn ao nuôi
-          </h3>
-          <p>Vui lòng chọn Vùng và Ao để xem cảnh báo và thiết lập ngưỡng.</p>
-        </div>
-      ) : (
-        <>
-          {/* Summary Row */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {[
-              { label: 'Chưa xử lý', value: unread, color: 'text-red-700', bg: 'bg-red-50', icon: <AlertTriangle size={20} /> },
-              { label: 'Ao đang chọn', value: selectedPondName || '—', color: 'text-teal-700', bg: 'bg-teal-50', icon: <Fish size={20} /> },
-              { label: 'Thiết lập', value: '—', color: 'text-amber-700', bg: 'bg-amber-50', icon: <Settings size={20} /> },
-            ].map((s) => (
-              <div key={s.label} className={`${s.bg} rounded-xl p-4 flex items-center gap-3`}>
-                <div className={`${s.color} opacity-70`}>{s.icon}</div>
-                <div>
-                  <p className={`${s.color} text-xl font-bold leading-tight`}>{s.value}</p>
-                  <p className="text-gray-500 text-xs mt-0.5">{s.label}</p>
-                </div>
-              </div>
-            ))}
+      {/* Summary Row — always visible */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {[
+          { label: 'Chưa xử lý', value: unread, color: 'text-red-700', bg: 'bg-red-50', icon: <AlertTriangle size={20} /> },
+          { label: selectedPond ? 'Ao đang lọc' : 'Tất cả ao', value: selectedPondName || 'Tất cả', color: 'text-teal-700', bg: 'bg-teal-50', icon: <Fish size={20} /> },
+          { label: 'Thiết lập', value: '—', color: 'text-amber-700', bg: 'bg-amber-50', icon: <Settings size={20} /> },
+        ].map((s) => (
+          <div key={s.label} className={`${s.bg} rounded-xl p-4 flex items-center gap-3`}>
+            <div className={`${s.color} opacity-70`}>{s.icon}</div>
+            <div>
+              <p className={`${s.color} text-xl font-bold leading-tight`}>{s.value}</p>
+              <p className="text-gray-500 text-xs mt-0.5">{s.label}</p>
+            </div>
           </div>
+        ))}
+      </div>
 
-          {/* Tabs */}
-          <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-            {tabs.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setActiveTab(t.key)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  activeTab === t.key
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {t.icon}
-                {t.label}
-                {t.key === 'log' && unread > 0 && (
-                  <span className="bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">
-                    {unread > 9 ? '9+' : unread}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
+      {/* Tabs — always visible */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === t.key
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t.icon}
+            {t.label}
+            {t.key === 'log' && unread > 0 && (
+              <span className="bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">
+                {unread > 9 ? '9+' : unread}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
-          {/* Tab content */}
-          {activeTab === 'threshold'
-            ? <ThresholdTab selectedPond={selectedPond} pondName={selectedPondName} />
-            : <AlertLogsTab  selectedPond={selectedPond} pondName={selectedPondName} />
-          }
-        </>
-      )}
+      {/* Tab content — always visible */}
+      {activeTab === 'threshold'
+        ? <ThresholdTab selectedPond={selectedPond} pondName={selectedPondName} />
+        : <AlertLogsTab selectedPond={selectedPond} pondName={selectedPondName} onUnreadChange={setUnread} />
+      }
     </div>
   );
 };

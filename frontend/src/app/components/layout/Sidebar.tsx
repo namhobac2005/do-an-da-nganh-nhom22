@@ -2,10 +2,14 @@
  * Sidebar.tsx
  * Navigation sidebar chính của ứng dụng
  * Hiển thị menu theo role (Admin/User)
+ *
+ * Includes:
+ *   - Live unread alert count via initial fetch + Supabase Realtime
+ *   - Pulsing red dot next to "Cảnh Báo & Ngưỡng" when unread > 0
  */
 
 import { NavLink, useLocation } from "react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   Waves,
@@ -23,6 +27,8 @@ import {
   Activity,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { supabase } from "../../lib/supabaseClient";
+import * as alertService from "../../services/alertService";
 
 interface NavItem {
   path?: string;
@@ -31,119 +37,14 @@ interface NavItem {
   adminOnly?: boolean;
   badge?: number;
   children?: NavItem[];
+  /** Internal key for matching alert badge */
+  _alertBadge?: boolean;
 }
 
 interface NavGroup {
   title: string;
   items: NavItem[];
 }
-
-const NAV_GROUPS: NavGroup[] = [
-  {
-    title: "TỔNG QUAN",
-    items: [
-      {
-        path: "/dashboard",
-        label: "Dashboard",
-        icon: <LayoutDashboard size={18} />,
-      },
-      {
-        path: "/zones",
-        label: "Vùng Nuôi",
-        icon: <Waves size={18} />,
-      },
-    ],
-  },
-  {
-    title: "QUẢN TRỊ HỆ THỐNG",
-    items: [
-      {
-        label: "Thiết Bị",
-        icon: <Cpu size={18} />,
-        adminOnly: true,
-        children: [
-          {
-            path: "/admin/devices",
-            label: "Quản lý thiết bị",
-            icon: <Activity size={16} />,
-          },
-          {
-            path: "/control",
-            label: "Điều khiển thiết bị",
-            icon: <Zap size={16} />,
-          },
-        ],
-      },
-      {
-        path: "/admin/users",
-        label: "Tài Khoản",
-        icon: <Users size={18} />,
-        adminOnly: true,
-      },
-      {
-        path: "/admin/alerts",
-        label: "Cảnh Báo & Ngưỡng",
-        icon: <BellRing size={18} />,
-        adminOnly: true,
-      },
-      {
-        path: "/admin/logs",
-        label: "Nhật Ký Hành Động",
-        icon: <Activity size={18} />,
-        adminOnly: true,
-      },
-    ],
-  },
-  {
-    title: "THIẾT BỊ & NHẬT KÝ",
-    items: [
-      {
-        path: "/devices",
-        label: "Quản Lý Thiết Bị",
-        icon: <Cpu size={18} />,
-      },
-      {
-        path: "/device-logs",
-        label: "Nhật Ký Điều Khiển",
-        icon: <Activity size={18} />,
-      },
-      {
-        path: "/control",
-        label: "Điều Khiển Thiết Bị",
-        icon: <Zap size={18} />,
-      },
-      {
-        path: "/alerts",
-        label: "Cảnh Báo & Ngưỡng",
-        icon: <BellRing size={18} />,
-      },
-    ],
-  },
-  {
-    title: "GIÁM SÁT & VẬN HÀNH",
-    items: [
-      {
-        path: "/monitoring",
-        label: "Giám Sát Real-time",
-        icon: <Gauge size={18} />,
-      },
-    ],
-  },
-  {
-    title: "BÁO CÁO",
-    items: [
-      {
-        path: "/reports",
-        label: "Báo Cáo & Thống Kê",
-        icon: <BarChart3 size={18} />,
-      },
-    ],
-  },
-  {
-    title: "HỖ TRỢ AI",
-    items: [{ path: "/chatbot", label: "Chatbot AI", icon: <Bot size={18} /> }],
-  },
-];
 
 interface SidebarProps {
   isOpen: boolean;
@@ -154,12 +55,173 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const { user, logout, hasRole } = useAuth();
   const location = useLocation();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const toggleGroup = (label: string) =>
     setOpenGroups((s) => ({ ...s, [label]: !s[label] }));
 
   const isActive = (path: string) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
+
+  // ===== Unread alert count: initial fetch + Realtime =====
+  useEffect(() => {
+    // Initial fetch
+    alertService.getUnreadCount().then(setUnreadCount).catch(() => null);
+
+    // Realtime: listen for INSERT (new alert) and UPDATE (resolve) on alert_logs
+    const channel = supabase
+      .channel('sidebar-alert-badge')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'alert_logs' },
+        () => {
+          // New alert inserted → re-fetch exact count from backend
+          alertService.getUnreadCount().then(setUnreadCount).catch(() => null);
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'alert_logs' },
+        () => {
+          // Alert resolved → re-fetch exact count from backend
+          alertService.getUnreadCount().then(setUnreadCount).catch(() => null);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Build nav groups with dynamic alert badge
+  const NAV_GROUPS: NavGroup[] = [
+    {
+      title: "TỔNG QUAN",
+      items: [
+        {
+          path: "/dashboard",
+          label: "Dashboard",
+          icon: <LayoutDashboard size={18} />,
+        },
+        {
+          path: "/zones",
+          label: "Vùng Nuôi",
+          icon: <Waves size={18} />,
+        },
+      ],
+    },
+    {
+      title: "QUẢN TRỊ HỆ THỐNG",
+      items: [
+        {
+          label: "Thiết Bị",
+          icon: <Cpu size={18} />,
+          adminOnly: true,
+          children: [
+            {
+              path: "/admin/devices",
+              label: "Quản lý thiết bị",
+              icon: <Activity size={16} />,
+            },
+            {
+              path: "/control",
+              label: "Điều khiển thiết bị",
+              icon: <Zap size={16} />,
+            },
+          ],
+        },
+        {
+          path: "/admin/users",
+          label: "Tài Khoản",
+          icon: <Users size={18} />,
+          adminOnly: true,
+        },
+        {
+          path: "/admin/alerts",
+          label: "Cảnh Báo & Ngưỡng",
+          icon: <BellRing size={18} />,
+          adminOnly: true,
+          _alertBadge: true,
+        },
+        {
+          path: "/admin/logs",
+          label: "Nhật Ký Hành Động",
+          icon: <Activity size={18} />,
+          adminOnly: true,
+        },
+      ],
+    },
+    {
+      title: "THIẾT BỊ & NHẬT KÝ",
+      items: [
+        {
+          path: "/devices",
+          label: "Quản Lý Thiết Bị",
+          icon: <Cpu size={18} />,
+        },
+        {
+          path: "/device-logs",
+          label: "Nhật Ký Điều Khiển",
+          icon: <Activity size={18} />,
+        },
+        {
+          path: "/control",
+          label: "Điều Khiển Thiết Bị",
+          icon: <Zap size={18} />,
+        },
+        {
+          path: "/alerts",
+          label: "Cảnh Báo & Ngưỡng",
+          icon: <BellRing size={18} />,
+          _alertBadge: true,
+        },
+      ],
+    },
+    {
+      title: "GIÁM SÁT & VẬN HÀNH",
+      items: [
+        {
+          path: "/monitoring",
+          label: "Giám Sát Real-time",
+          icon: <Gauge size={18} />,
+        },
+      ],
+    },
+    {
+      title: "BÁO CÁO",
+      items: [
+        {
+          path: "/reports",
+          label: "Báo Cáo & Thống Kê",
+          icon: <BarChart3 size={18} />,
+        },
+      ],
+    },
+    {
+      title: "HỖ TRỢ AI",
+      items: [{ path: "/chatbot", label: "Chatbot AI", icon: <Bot size={18} /> }],
+    },
+  ];
+
+  /** Renders the alert badge (pulsing red dot + count) */
+  const renderAlertBadge = () => {
+    if (unreadCount <= 0) return null;
+    return (
+      <span className="ml-auto flex items-center gap-1.5">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+        </span>
+        <span
+          className="bg-red-500 text-white rounded-full min-w-[20px] h-5 flex items-center justify-center px-1"
+          style={{ fontSize: "11px", fontWeight: 700 }}
+        >
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
+      </span>
+    );
+  };
 
   return (
     <>
@@ -323,8 +385,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                             {item.label}
                           </span>
 
-                          {/* Badge cảnh báo */}
-                          {item.badge && item.badge > 0 && (
+                          {/* Alert badge with pulsing red dot */}
+                          {item._alertBadge && renderAlertBadge()}
+
+                          {/* Badge cảnh báo (static, if set manually) */}
+                          {!item._alertBadge && item.badge && item.badge > 0 && (
                             <span
                               className="ml-auto bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center"
                               style={{ fontSize: "11px", fontWeight: 700 }}
@@ -334,7 +399,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                           )}
 
                           {/* Active indicator */}
-                          {isActive(item.path!) && (
+                          {!item._alertBadge && isActive(item.path!) && (
                             <ChevronRight
                               size={14}
                               className="ml-auto opacity-70"

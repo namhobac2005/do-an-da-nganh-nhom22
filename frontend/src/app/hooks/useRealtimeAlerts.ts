@@ -2,12 +2,17 @@
  * useRealtimeAlerts.ts
  * Custom hook — subscribes to Supabase Realtime INSERT events on alert_logs.
  *
+ * Role-based filtering logic:
+ *   - Admin: receives toast for ALL alerts (no pond filtering)
+ *   - User:  only receives toast for alerts where zone_id (= pond_id) is in their assigned ponds
+ *
  * Behavior:
- *   1. On mount, fetches the current user's assigned pond IDs via the zone/pond API.
- *   2. Opens a Supabase Realtime channel listening for INSERT on public.alert_logs.
- *   3. When a new alert arrives, checks if payload.new.zone_id is in the user's
- *      pond list (zone_id stores the pond UUID in alert_logs).
- *   4. If it matches, fires a toast.error() notification with a Vietnamese message.
+ *   1. On mount, checks user role from AuthContext.
+ *   2. If user is NOT admin, fetches assigned pond IDs via the zone/pond API.
+ *   3. Opens a Supabase Realtime channel listening for INSERT on public.alert_logs.
+ *   4. When a new alert arrives:
+ *      - If admin → always show toast
+ *      - If user → only show toast if payload.new.zone_id is in their pond list
  *   5. Cleans up the channel subscription on unmount.
  *
  * Activated globally in MainLayout.tsx so it runs for all authenticated pages.
@@ -31,14 +36,22 @@ const METRIC_LABELS: Record<string, string> = {
 export const useRealtimeAlerts = () => {
   const { user, isAuthenticated } = useAuth();
   const pondIdsRef = useRef<string[]>([]);
+  const isAdminRef = useRef(false);
 
   useEffect(() => {
     if (!isAuthenticated || !user) return;
 
     let cancelled = false;
+    isAdminRef.current = user.role === 'admin';
 
-    // 1. Fetch user's assigned pond IDs
+    // 1. For non-admin users, fetch their assigned pond IDs
     const loadPondIds = async () => {
+      // Admins see ALL alerts → no need to fetch pond list
+      if (isAdminRef.current) {
+        console.log('[useRealtimeAlerts] Admin — nhận tất cả cảnh báo');
+        return;
+      }
+
       try {
         const zones = await zoneService.getZones();
         if (cancelled || !Array.isArray(zones)) return;
@@ -60,7 +73,7 @@ export const useRealtimeAlerts = () => {
         if (!cancelled) {
           pondIdsRef.current = allPondIds;
           console.log(
-            `[useRealtimeAlerts] Đang theo dõi ${allPondIds.length} ao nuôi`,
+            `[useRealtimeAlerts] User — đang theo dõi ${allPondIds.length} ao nuôi`,
           );
         }
       } catch (err) {
@@ -83,7 +96,7 @@ export const useRealtimeAlerts = () => {
         (payload) => {
           const newAlert = payload.new as {
             id: string;
-            zone_id: string | null;
+            zone_id: string | null;  // Actually stores pond_id
             metric: string;
             recorded_value: number;
             reason: string;
@@ -91,13 +104,18 @@ export const useRealtimeAlerts = () => {
             created_at: string;
           };
 
-          // 3. Filter: only show toast if the alert's pond is in user's list
           const alertPondId = newAlert.zone_id;
           if (!alertPondId) return;
 
-          if (pondIdsRef.current.length > 0 && !pondIdsRef.current.includes(alertPondId)) {
-            // Alert is for a pond the user doesn't manage — ignore
-            return;
+          // 3. Role-based filtering
+          if (isAdminRef.current) {
+            // Admin → always show toast for all alerts
+          } else {
+            // User → only show toast if this pond is in their assigned list
+            if (pondIdsRef.current.length > 0 && !pondIdsRef.current.includes(alertPondId)) {
+              return; // Not their pond → skip
+            }
+            // If pondIdsRef is empty (still loading), show it anyway to be safe
           }
 
           // 4. Show toast notification
