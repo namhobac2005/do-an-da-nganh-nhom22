@@ -100,7 +100,10 @@ export const SensorsPage: React.FC = () => {
     setLoadingLatest(true);
     try {
       const data = await sensorService.getLatestSensorsByZoneAll();
-      setLatestSensors(Array.isArray(data) ? data : []);
+      const sensorsArray = Array.isArray(data)
+        ? data
+        : (data as any)?.data || [];
+      setLatestSensors(sensorsArray);
     } catch (e: any) {
       toast.error(e?.message ?? "Không thể tải latest sensors");
       setLatestSensors([]);

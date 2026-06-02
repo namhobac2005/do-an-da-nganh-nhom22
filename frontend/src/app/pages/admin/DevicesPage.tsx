@@ -59,28 +59,52 @@ export const DevicesPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [devicesData, sensorsData, zonesData] = await Promise.all([
+      const [resDevices, resSensors, resZones] = await Promise.all([
         deviceService.getAllDevices(),
         sensorService.getLatestSensorsByZoneAll(),
         zoneService.getZones(),
       ]);
-      // Build a map of ponds by id by fetching ponds for each zone
+
+      console.log("[Debug 1] API Raw Response - Sensors:", resSensors);
+      console.log("[Debug 1] API Raw Response - Zones:", resZones);
+
+      // Đảm bảo dữ liệu luôn là mảng (xử lý cả trường hợp API trả về mảng trực tiếp hoặc { data: [...] })
+      const devicesData = Array.isArray(resDevices)
+        ? resDevices
+        : (resDevices as any)?.data || [];
+      const sensorsData = Array.isArray(resSensors)
+        ? resSensors
+        : (resSensors as any)?.data || [];
+      const zonesData = Array.isArray(resZones)
+        ? resZones
+        : (resZones as any)?.data || [];
+
+      // Tối ưu: Lấy dữ liệu ao song song (Parallel)
       const pondMap: Record<string, any> = {};
       await Promise.all(
-        (zonesData || []).map(async (z: any) => {
+        zonesData.map(async (z: any) => {
           try {
-            const ponds = await zoneService.getPondsByZone(z.id);
-            (ponds || []).forEach((p: any) => {
+            const resPonds = await zoneService.getPondsByZone(z.id);
+            const ponds = Array.isArray(resPonds)
+              ? resPonds
+              : (resPonds as any)?.data || [];
+            ponds.forEach((p: any) => {
               pondMap[p.id] = { ...p, zone_id: z.id, zone_name: z.name };
             });
           } catch (e) {
-            // ignore per-zone pond fetch errors
+            console.error(`[Debug Error] Lỗi tải ao cho vùng ${z.id}:`, e);
           }
         }),
       );
 
+      console.log(
+        "[Debug 2] Pond Map built:",
+        Object.keys(pondMap).length,
+        "ponds",
+      );
+
       // Transform devices to include names for zone and pond when available
-      const formattedDevices = devicesData.map((dev: any) => {
+      const formattedDevices = (devicesData || []).map((dev: any) => {
         const pond = dev.pond_id ? pondMap[dev.pond_id] : undefined;
         const zoneName =
           pond?.zone_name ||
@@ -105,20 +129,25 @@ export const DevicesPage: React.FC = () => {
       // Chuẩn hóa dữ liệu Sensor để tương thích với bộ lọc (pond_id, pond_name, zone_name)
       const formattedSensors = (sensorsData || []).map((sen: any) => {
         const pId = sen.pond_id || sen.pondId; // Hỗ trợ cả snake_case và camelCase
-        const pond = pId ? pondMap[pId] : undefined;
+        const pond = pId && pondMap[pId] ? pondMap[pId] : undefined;
+
+        // Ưu tiên zone_id từ API mới (nếu có join), sau đó đến pondMap
+        const zId = sen.zone_id || sen.zoneId || pond?.zone_id || "";
         const zoneName =
           pond?.zone_name ||
-          (zonesData.find((z: any) => z.id === (sen.zone_id || sen.zoneId))
-            ?.name ??
+          (zonesData.find((z: any) => String(z.id) === String(zId))?.name ??
             null);
 
         return {
           ...sen,
           pond_id: pId ?? null,
-          pond_name: pond?.name ?? null,
+          zone_id: zId,
+          pond_name: pond?.name || sen.pond_name || null,
           zone_name: zoneName ?? null,
         } as SensorData;
       });
+
+      console.log("[Debug 3] Formatted Sensors:", formattedSensors);
 
       setDevices(formattedDevices);
       setSensors(formattedSensors);
@@ -197,14 +226,27 @@ export const DevicesPage: React.FC = () => {
   // ===== FILTER =====
   const filterItems = (items: any[]) =>
     items.filter((d) => {
-      if (selectedZoneId) {
-        if (!d.pond_id) return false;
-        if (!filterPonds.some((pond) => pond.id === d.pond_id)) return false;
+      const normalized = searchQuery.toLowerCase();
+
+      // Nếu selectedZoneId là chuỗi rỗng (Tất cả vùng), không lọc
+      if (selectedZoneId && selectedZoneId !== "") {
+        // Kiểm tra xem thiết bị/cảm biến có thuộc vùng đang chọn không (trực tiếp hoặc qua ao)
+        const isFromZone = String(d.zone_id) === String(selectedZoneId);
+        const isFromPondInZone =
+          d.pond_id &&
+          filterPonds.some((p) => String(p.id) === String(d.pond_id));
+
+        if (!isFromZone && !isFromPondInZone) return false;
       }
 
-      if (selectedPondId && d.pond_id !== selectedPondId) return false;
+      if (
+        selectedPondId &&
+        selectedPondId !== "" &&
+        String(d.pond_id) !== String(selectedPondId)
+      ) {
+        return false;
+      }
 
-      const normalized = searchQuery.toLowerCase();
       const feedKey = d.feed_key ?? "";
       const name = d.name ?? "";
       const description = d.description ?? "";
@@ -219,10 +261,12 @@ export const DevicesPage: React.FC = () => {
     () => filterItems(devices),
     [devices, selectedZoneId, selectedPondId, searchQuery, filterPonds],
   );
-  const filteredSensors = useMemo(
-    () => filterItems(sensors),
-    [sensors, selectedZoneId, selectedPondId, searchQuery, filterPonds],
-  );
+
+  const filteredSensors = useMemo(() => {
+    const result = filterItems(sensors);
+    console.log("[Debug 4] Final Sensors for render:", result);
+    return result;
+  }, [sensors, selectedZoneId, selectedPondId, searchQuery, filterPonds]);
 
   // ===== HANDLERS =====
   const handleOpenCreate = () => {

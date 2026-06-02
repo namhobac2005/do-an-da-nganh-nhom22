@@ -62,7 +62,8 @@ export const getLatestSensorsByPond = async (pondId: string) => {
     .from("sensors")
     .select(
       `
-      id, name, type, unit, status,
+      id, name, type, unit, status, pond_id, 
+      ponds ( zone_id, name ),
       sensor_data ( value, timestamp )
     `,
     )
@@ -78,6 +79,9 @@ export const getLatestSensorsByPond = async (pondId: string) => {
     type: s.type,
     unit: s.unit,
     status: s.status,
+    pond_id: s.pond_id,
+    zone_id: (s as any).ponds?.zone_id || null,
+    pond_name: (s as any).ponds?.name || null,
     value: s.sensor_data?.[0]?.value ?? 0,
     updated_at: s.sensor_data?.[0]?.timestamp ?? null,
   }));
@@ -193,18 +197,20 @@ export const getLatestSensorsByZoneAllForUser = async (
   userId: string,
   role?: string,
 ) => {
-  if (!userId || isAdmin(role)) {
-    // Admin: trả latest cho toàn bộ sensors (không enforce pond access)
-    // Lấy bằng approach: join sensor_data theo limit newest từng sensor là khá phức tạp.
-    // Ở đây dùng query Supabase tương tự per-pond nhưng theo từng pond.
+  let finalPondIds: string[] = [];
+
+  if (isAdmin(role)) {
+    // Admin: Lấy tất cả IDs của các ao đang hoạt động trong hệ thống
+    const { data: allPonds, error: pErr } = await supabase
+      .from("ponds")
+      .select("id");
+    if (pErr) throw pErr;
+    finalPondIds = (allPonds || []).map((p: any) => p.id);
+  } else {
+    // User thường: Lấy danh sách pond được phân quyền
+    finalPondIds = await getUserPondIds(userId);
   }
 
-  // Lấy danh sách pond user có quyền
-  const pondIds = isAdmin(role) ? null : await getUserPondIds(userId);
-  if (!isAdmin(role) && (!pondIds || pondIds.length === 0)) return [];
-
-  // Với admin: lấy pondIds từ user_ponds cũng có thể không đủ (tùy schema). Để đơn giản, vẫn reuse user_ponds.
-  const finalPondIds = pondIds ?? (await getUserPondIds(userId));
   if (!finalPondIds || finalPondIds.length === 0) return [];
 
   // Lấy latest theo từng pond rồi concat

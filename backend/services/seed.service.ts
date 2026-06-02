@@ -1,7 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
-import { faker } from '@faker-js/faker/locale/vi'; // Sử dụng locale Tiếng Việt
-import dotenv from 'dotenv';
-import bcrypt from 'bcrypt';
+import { createClient } from "@supabase/supabase-js";
+import { faker } from "@faker-js/faker/locale/vi"; // Sử dụng locale Tiếng Việt
+import dotenv from "dotenv";
+import bcrypt from "bcrypt";
 
 dotenv.config();
 
@@ -11,74 +11,74 @@ const supabase = createClient(
 );
 
 async function seedVietnamData() {
-  console.log('🇲🇳 Đang khởi tạo dữ liệu mẫu phong cách Việt Nam...');
+  console.log("🇲🇳 Đang khởi tạo dữ liệu mẫu phong cách Việt Nam...");
 
-  const rawPassword = 'password123';
+  const rawPassword = "password123";
   const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
   // 1. Danh sách Users (Giữ nguyên phân quyền)
   const usersToSeed = [
     {
-      username: 'nguyen_van_admin',
-      email: 'admin@aquaculture.vn',
+      username: "nguyen_van_admin",
+      email: "admin@aquaculture.vn",
       password: hashedPassword,
-      role: 'admin',
-      status: 'active',
+      role: "admin",
+      status: "active",
     },
     {
-      username: 'tran_thi_chuho',
-      email: 'thanh.tran@gmail.com',
+      username: "tran_thi_chuho",
+      email: "thanh.tran@gmail.com",
       password: hashedPassword,
-      role: 'user',
-      status: 'active',
+      role: "user",
+      status: "active",
     },
     {
-      username: 'le_van_nuoi',
-      email: 'nuoitom.mientay@gmail.com',
+      username: "le_van_nuoi",
+      email: "nuoitom.mientay@gmail.com",
       password: hashedPassword,
-      role: 'user',
-      status: 'active',
+      role: "user",
+      status: "active",
     },
     {
-      username: 'pham_minh_ao',
-      email: 'minhao88@gmail.com',
+      username: "pham_minh_ao",
+      email: "minhao88@gmail.com",
       password: hashedPassword,
-      role: 'user',
-      status: 'active',
+      role: "user",
+      status: "active",
     },
     {
-      username: 'hoang_gia_farm',
-      email: 'contact@hoanggiafarm.vn',
+      username: "hoang_gia_farm",
+      email: "contact@hoanggiafarm.vn",
       password: hashedPassword,
-      role: 'user',
-      status: 'active',
+      role: "user",
+      status: "active",
     },
   ];
 
   const tinhThanh = [
-    'Tiền Giang',
-    'Bến Tre',
-    'Trà Vinh',
-    'Sóc Trăng',
-    'Bạc Liêu',
-    'Cà Mau',
-    'Đồng Tháp',
+    "Tiền Giang",
+    "Bến Tre",
+    "Trà Vinh",
+    "Sóc Trăng",
+    "Bạc Liêu",
+    "Cà Mau",
+    "Đồng Tháp",
   ];
 
   // Mapping loài thủy sản vào cột farming_type của bảng ponds trong DB
   const loaiThuySan = [
-    'Tôm Thẻ Chân Trắng',
-    'Tôm Sú',
-    'Cá Tra',
-    'Cá Rô Phi',
-    'Cá Điêu Hồng',
-    'Cua Cà Mau',
+    "Tôm Thẻ Chân Trắng",
+    "Tôm Sú",
+    "Cá Tra",
+    "Cá Rô Phi",
+    "Cá Điêu Hồng",
+    "Cua Cà Mau",
   ];
 
   try {
     // 1. INSERT USERS
     const { data: createdUsers, error: userError } = await supabase
-      .from('users')
+      .from("users")
       .insert(usersToSeed)
       .select();
 
@@ -94,12 +94,12 @@ async function seedVietnamData() {
 
         // 2. TẠO ZONE (Sửa lỗi: Bảng zones không có user_id trong schema)
         const { data: zone, error: zoneError } = await supabase
-          .from('zones')
+          .from("zones")
           .insert([
             {
               name: `Trang trại ${tinh} - Phân khu ${i}`,
               location: `${faker.location.streetAddress()}, ${tinh}`,
-              status: 'active',
+              status: "active",
               description: `Vùng nuôi thủy sản chất lượng cao tại ${tinh}`,
             },
           ])
@@ -120,14 +120,14 @@ async function seedVietnamData() {
           const species = faker.helpers.arrayElement(loaiThuySan);
 
           const { data: pond, error: pondError } = await supabase
-            .from('ponds')
+            .from("ponds")
             .insert([
               {
                 zone_id: zone.id,
-                name: `Ao nuôi ${j} - ${faker.helpers.arrayElement(['Khu A', 'Khu B'])}`,
+                name: `Ao nuôi ${j} - ${faker.helpers.arrayElement(["Khu A", "Khu B"])}`,
                 location: `Tọa độ ao số ${j}, hàng ${faker.number.int({ min: 1, max: 5 })}`,
                 farming_type: species, // Đưa loài thủy sản vào cột farming_type tương ứng trong DB
-                status: 'active',
+                status: "active",
               },
             ])
             .select()
@@ -142,7 +142,7 @@ async function seedVietnamData() {
 
           // 4. LIÊN KẾT USER VỚI POND (Thêm mới: Điền dữ liệu vào bảng trung gian user_ponds)
           const { error: userPondError } = await supabase
-            .from('user_ponds')
+            .from("user_ponds")
             .insert([
               {
                 user_id: user.id,
@@ -168,10 +168,10 @@ async function seedVietnamData() {
       '\n🎉 Chúc mừng! Toàn bộ hệ thống "Farm Miền Tây" đã sẵn sàng.',
     );
     console.log(
-      'Dữ liệu đã bao gồm: Users, Zones, Ponds cấu trúc chuẩn và bảng trung gian user_ponds.',
+      "Dữ liệu đã bao gồm: Users, Zones, Ponds cấu trúc chuẩn và bảng trung gian user_ponds.",
     );
   } catch (error: any) {
-    console.error('❌ Lỗi Seed tổng thể:', error.message);
+    console.error("❌ Lỗi Seed tổng thể:", error.message);
   }
 }
 
