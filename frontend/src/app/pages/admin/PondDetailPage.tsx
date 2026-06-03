@@ -133,25 +133,13 @@ const DashboardTab: React.FC<{ pondId: string }> = ({ pondId }) => {
 };
 
 const DevicesTab: React.FC<{ pondId: string }> = ({ pondId }) => {
-  const [devices, setDevices] = useState<deviceService.Device[]>([]);
+  const [devices, setDevices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     deviceService
       .getAllDevices()
-      .then((res) =>
-        setDevices(
-          res
-            .filter((d) => d.pond_id === pondId)
-            .map(
-              (d) =>
-                ({
-                  ...d,
-                  status: (d as any).status ?? "OFF",
-                }) as deviceService.Device,
-            ),
-        ),
-      )
+      .then((res) => setDevices(res.filter((d: any) => d.pond_id === pondId)))
       .catch(() => setDevices([]))
       .finally(() => setLoading(false));
   }, [pondId]);
@@ -184,24 +172,25 @@ const DevicesTab: React.FC<{ pondId: string }> = ({ pondId }) => {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {devices.map((d) => (
-            <tr key={d.id} className="hover:bg-gray-50/50">
-              <td className="p-4 font-medium text-gray-800">{d.name}</td>
-              <td className="p-4 text-sm text-gray-600">{d.type}</td>
-              <td className="p-4">
-                <span
-                  className={`px-2 py-1 rounded-md text-xs font-semibold ${d.status === "ON" || d.status === "1" ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700"}`}
-                >
-                  {d.status === "ON" || d.status === "1"
-                    ? "Đang bật"
-                    : "Đang tắt"}
-                </span>
-              </td>
-              <td className="p-4 text-sm text-gray-600">
-                {d.mode === "auto" ? "Tự động" : "Thủ công"}
-              </td>
-            </tr>
-          ))}
+          {devices.map((d: any) => {
+            const isOn = d.isActive === true || d.level > 0;
+            return (
+              <tr key={d.id} className="hover:bg-gray-50/50">
+                <td className="p-4 font-medium text-gray-800">{d.name}</td>
+                <td className="p-4 text-sm text-gray-600">{d.type}</td>
+                <td className="p-4">
+                  <span
+                    className={`px-2 py-1 rounded-md text-xs font-semibold ${isOn ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700"}`}
+                  >
+                    {isOn ? "Đang bật" : "Đang tắt"}
+                  </span>
+                </td>
+                <td className="p-4 text-sm text-gray-600">
+                  {d.mode === "auto" ? "Tự động" : "Thủ công"}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

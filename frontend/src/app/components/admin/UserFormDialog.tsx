@@ -83,15 +83,17 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({
   // Real ponds fetched from API, grouped by zone
   const [pondsByZone, setPondsByZone] = useState<{ zone: { id: string; name: string }; ponds: { id: string; name: string; farming_type: string | null }[] }[]>([]);
   const [pondsLoading, setPondsLoading] = useState(false);
+  const [pondOwners, setPondOwners] = useState<Record<string, string>>({});
 
-  // Fetch zones then ponds for each zone
+  // Fetch zones then ponds for each zone, plus current owners
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setPondsLoading(true);
 
-    zoneService.getZones()
-      .then(async (zones: any[]) => {
+    const fetchAll = async () => {
+      try {
+        const zones = await zoneService.getZones();
         if (cancelled) return;
         const results = await Promise.all(
           (zones || []).map(async (z: any) => {
@@ -104,14 +106,39 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({
           })
         );
         if (!cancelled) setPondsByZone(results.filter((r) => r.ponds.length > 0));
-      })
-      .catch(() => {
-        if (!cancelled) setPondsByZone([]);
-      })
-      .finally(() => {
-        if (!cancelled) setPondsLoading(false);
-      });
 
+        // Fetch all users to build a pond → owner map
+        try {
+          const usersRes = await fetch('http://localhost:5000/admin/users', {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          if (usersRes.ok) {
+            const usersBody = await usersRes.json();
+            const users = usersBody.data || usersBody || [];
+            const ownerMap: Record<string, string> = {};
+            for (const u of users) {
+              if (u.ponds && Array.isArray(u.ponds)) {
+                for (const p of u.ponds) {
+                  ownerMap[p.id] = u.username || u.email || 'Người dùng';
+                }
+              }
+            }
+            if (!cancelled) setPondOwners(ownerMap);
+          }
+        } catch {
+          // ignore — owner display is optional
+        }
+      } catch {
+        if (!cancelled) setPondsByZone([]);
+      } finally {
+        if (!cancelled) setPondsLoading(false);
+      }
+    };
+
+    fetchAll();
     return () => { cancelled = true; };
   }, [open]);
 
@@ -346,6 +373,9 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({
                                     <span className="ml-1.5 text-xs text-gray-400 font-normal">
                                       ({pond.farming_type})
                                     </span>
+                                  )}
+                                  {pondOwners[pond.id] && pondOwners[pond.id] !== (editUser?.username ?? '') && (
+                                    <span className="text-gray-500 italic ml-2 text-xs font-normal">- đã quản lý bởi {pondOwners[pond.id]}</span>
                                   )}
                                 </span>
                                 <div

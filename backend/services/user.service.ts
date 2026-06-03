@@ -109,6 +109,20 @@ export const getUserById = async (id: string): Promise<UserProfile> => {
 };
 
 export const createUser = async (dto: CreateUserDto): Promise<UserProfile> => {
+  // STEP 0 — PRE-VALIDATE pond ownership BEFORE creating user account
+  if (dto.pondIds && dto.pondIds.length > 0) {
+    const { data: takenPonds, error: checkErr } = await supabaseAdmin
+      .from('user_ponds')
+      .select('pond_id')
+      .in('pond_id', dto.pondIds);
+
+    if (checkErr) throw new Error(checkErr.message);
+
+    if (takenPonds && takenPonds.length > 0) {
+      throw new Error('Ao đã có người quản lý. Vui lòng chọn ao khác.');
+    }
+  }
+
   // STEP 1 — Hash password
   const hashedPassword = await bcrypt.hash(dto.password, SALT_ROUNDS);
 
@@ -132,7 +146,7 @@ export const createUser = async (dto: CreateUserDto): Promise<UserProfile> => {
 
   const userId = newUser.id;
 
-  // STEP 3 — Assign ponds if provided
+  // STEP 3 — Assign ponds if provided (already validated above)
   if (dto.pondIds && dto.pondIds.length > 0) {
     await updateUserPonds(userId, dto.pondIds);
   }

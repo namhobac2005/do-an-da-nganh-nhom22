@@ -181,14 +181,9 @@ export const Dashboard = () => {
     ? [
         { name: 'Hoạt động', value: kpis.activeDevices, color: '#10b981' },
         {
-          name: 'Ngoại tuyến',
-          value: Math.max(0, kpis.totalDevices - kpis.onlineDevices),
+          name: 'Không hoạt động',
+          value: Math.max(0, kpis.totalDevices - kpis.activeDevices),
           color: '#ef4444',
-        },
-        {
-          name: 'Chờ',
-          value: Math.max(0, kpis.onlineDevices - kpis.activeDevices),
-          color: '#f59e0b',
         },
       ]
     : [];
