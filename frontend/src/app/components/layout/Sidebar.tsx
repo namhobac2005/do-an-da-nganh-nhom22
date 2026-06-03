@@ -18,6 +18,7 @@ import {
   Users,
   Gauge,
   BellRing,
+  Thermometer,
   BarChart3,
   Bot,
   ChevronRight,
@@ -66,25 +67,34 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   // ===== Unread alert count: initial fetch + Realtime =====
   useEffect(() => {
     // Initial fetch
-    alertService.getUnreadCount().then(setUnreadCount).catch(() => null);
+    alertService
+      .getUnreadCount()
+      .then(setUnreadCount)
+      .catch(() => null);
 
     // Realtime: listen for INSERT (new alert) and UPDATE (resolve) on alert_logs
     const channel = supabase
-      .channel('sidebar-alert-badge')
+      .channel("sidebar-alert-badge")
       .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'alert_logs' },
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "alert_logs" },
         () => {
           // New alert inserted → re-fetch exact count from backend
-          alertService.getUnreadCount().then(setUnreadCount).catch(() => null);
+          alertService
+            .getUnreadCount()
+            .then(setUnreadCount)
+            .catch(() => null);
         },
       )
       .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'alert_logs' },
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "alert_logs" },
         () => {
           // Alert resolved → re-fetch exact count from backend
-          alertService.getUnreadCount().then(setUnreadCount).catch(() => null);
+          alertService
+            .getUnreadCount()
+            .then(setUnreadCount)
+            .catch(() => null);
         },
       )
       .subscribe();
@@ -122,12 +132,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             {
               path: "/admin/devices",
               label: "Quản lý thiết bị",
-              icon: <Activity size={16} />,
+              icon: <Cpu size={16} />,
             },
             {
               path: "/control",
-              label: "Điều khiển thiết bị",
-              icon: <Zap size={16} />,
+              label: "Vận hành hệ thống",
+              icon: <Activity size={16} />,
             },
           ],
         },
@@ -200,7 +210,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     },
     {
       title: "HỖ TRỢ AI",
-      items: [{ path: "/chatbot", label: "Chatbot AI", icon: <Bot size={18} /> }],
+      items: [
+        { path: "/chatbot", label: "Chatbot AI", icon: <Bot size={18} /> },
+      ],
     },
   ];
 
@@ -217,7 +229,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           className="bg-red-500 text-white rounded-full min-w-[20px] h-5 flex items-center justify-center px-1"
           style={{ fontSize: "11px", fontWeight: 700 }}
         >
-          {unreadCount > 99 ? '99+' : unreadCount}
+          {unreadCount > 99 ? "99+" : unreadCount}
         </span>
       </span>
     );
@@ -389,14 +401,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                           {item._alertBadge && renderAlertBadge()}
 
                           {/* Badge cảnh báo (static, if set manually) */}
-                          {!item._alertBadge && item.badge && item.badge > 0 && (
-                            <span
-                              className="ml-auto bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center"
-                              style={{ fontSize: "11px", fontWeight: 700 }}
-                            >
-                              {item.badge}
-                            </span>
-                          )}
+                          {!item._alertBadge &&
+                            item.badge &&
+                            item.badge > 0 && (
+                              <span
+                                className="ml-auto bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center"
+                                style={{ fontSize: "11px", fontWeight: 700 }}
+                              >
+                                {item.badge}
+                              </span>
+                            )}
 
                           {/* Active indicator */}
                           {!item._alertBadge && isActive(item.path!) && (

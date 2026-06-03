@@ -1,16 +1,16 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.SUPABASE_URL as string;
 const supabaseKey = process.env.SUPABASE_KEY as string;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const isAdmin = (role?: string) => role === 'admin';
+const isAdmin = (role?: string) => role === "admin";
 
 const getUserPondIds = async (userId: string) => {
   const { data, error } = await supabase
-    .from('user_ponds')
-    .select('pond_id')
-    .eq('user_id', userId);
+    .from("user_ponds")
+    .select("pond_id")
+    .eq("user_id", userId);
 
   if (error) throw error;
   return (data || []).map((row) => row.pond_id).filter(Boolean) as string[];
@@ -25,7 +25,7 @@ const userHasPondAccess = async (userId: string, pondId: string) => {
 const ensurePondAccessById = async (userId: string, pondId: string) => {
   const hasAccess = await userHasPondAccess(userId, pondId);
   if (!hasAccess) {
-    throw new Error('Bạn không có quyền truy cập ao nuôi này.');
+    throw new Error("Bạn không có quyền truy cập ao nuôi này.");
   }
 };
 
@@ -35,10 +35,10 @@ const ensurePondAccess = async (userId: string, pondId: string) => {
 
 // Lấy lịch sử dữ liệu của các sensor thuộc một Pond cụ thể
 export const getSensorHistoryByPond = async (pondId: string, limit: number) => {
-  if (!pondId || pondId === 'all') return [];
+  if (!pondId || pondId === "all") return [];
 
   const { data, error } = await supabase
-    .from('sensor_data')
+    .from("sensor_data")
     .select(
       `
       value,
@@ -46,8 +46,8 @@ export const getSensorHistoryByPond = async (pondId: string, limit: number) => {
       sensors!inner ( type, pond_id )
     `,
     )
-    .eq('sensors.pond_id', pondId) // Lọc đúng hồ
-    .order('timestamp', { ascending: false })
+    .eq("sensors.pond_id", pondId) // Lọc đúng hồ
+    .order("timestamp", { ascending: false })
     .limit(limit);
 
   if (error) throw error;
@@ -56,19 +56,20 @@ export const getSensorHistoryByPond = async (pondId: string, limit: number) => {
 
 // Lấy giá trị mới nhất của các sensor thuộc một Pond cụ thể
 export const getLatestSensorsByPond = async (pondId: string) => {
-  if (!pondId || pondId === 'all') return [];
+  if (!pondId || pondId === "all") return [];
 
   const { data, error } = await supabase
-    .from('sensors')
+    .from("sensors")
     .select(
       `
-      id, name, type, unit, status,
+      id, name, type, unit, status, pond_id, 
+      ponds ( zone_id, name ),
       sensor_data ( value, timestamp )
     `,
     )
-    .eq('pond_id', pondId) // Lọc đúng hồ
-    .order('timestamp', { foreignTable: 'sensor_data', ascending: false })
-    .limit(1, { foreignTable: 'sensor_data' });
+    .eq("pond_id", pondId) // Lọc đúng hồ
+    .order("timestamp", { foreignTable: "sensor_data", ascending: false })
+    .limit(1, { foreignTable: "sensor_data" });
 
   if (error) throw error;
 
@@ -78,6 +79,9 @@ export const getLatestSensorsByPond = async (pondId: string) => {
     type: s.type,
     unit: s.unit,
     status: s.status,
+    pond_id: s.pond_id,
+    zone_id: (s as any).ponds?.zone_id || null,
+    pond_name: (s as any).ponds?.name || null,
     value: s.sensor_data?.[0]?.value ?? 0,
     updated_at: s.sensor_data?.[0]?.timestamp ?? null,
   }));
@@ -85,13 +89,13 @@ export const getLatestSensorsByPond = async (pondId: string) => {
 
 // Lấy danh sách Vùng nuôi (Zone) mà User được quản lý
 export const getAllZones = async (userId: string) => {
-  if (!userId) throw new Error('Yêu cầu userId để lấy danh sách vùng nuôi');
+  if (!userId) throw new Error("Yêu cầu userId để lấy danh sách vùng nuôi");
 
   // Step 1: Get user's assigned pond IDs
   const { data: userPonds, error: upErr } = await supabase
-    .from('user_ponds')
-    .select('pond_id')
-    .eq('user_id', userId);
+    .from("user_ponds")
+    .select("pond_id")
+    .eq("user_id", userId);
 
   if (upErr) throw upErr;
 
@@ -102,9 +106,9 @@ export const getAllZones = async (userId: string) => {
 
   // Step 2: Get zone_ids from those ponds
   const { data: ponds, error: pErr } = await supabase
-    .from('ponds')
-    .select('zone_id')
-    .in('id', pondIds);
+    .from("ponds")
+    .select("zone_id")
+    .in("id", pondIds);
 
   if (pErr) throw pErr;
 
@@ -115,10 +119,10 @@ export const getAllZones = async (userId: string) => {
 
   // Step 3: Fetch zones with those IDs
   const { data: zones, error: zErr } = await supabase
-    .from('zones')
-    .select('id, name')
-    .in('id', zoneIds)
-    .order('name', { ascending: true });
+    .from("zones")
+    .select("id, name")
+    .in("id", zoneIds)
+    .order("name", { ascending: true });
 
   if (zErr) throw zErr;
 
@@ -135,12 +139,12 @@ export const getPondsByZoneForUser = async (
   role?: string,
 ) => {
   // Admin: get all ponds in zone
-  if (role === 'admin') {
+  if (role === "admin") {
     const { data, error } = await supabase
-      .from('ponds')
-      .select('id, name')
-      .eq('zone_id', zoneId)
-      .order('name', { ascending: true });
+      .from("ponds")
+      .select("id, name")
+      .eq("zone_id", zoneId)
+      .order("name", { ascending: true });
 
     if (error) throw error;
     return data || [];
@@ -151,11 +155,11 @@ export const getPondsByZoneForUser = async (
   if (pondIds.length === 0) return [];
 
   const { data, error } = await supabase
-    .from('ponds')
-    .select('id, name')
-    .eq('zone_id', zoneId)
-    .in('id', pondIds)
-    .order('name', { ascending: true });
+    .from("ponds")
+    .select("id, name")
+    .eq("zone_id", zoneId)
+    .in("id", pondIds)
+    .order("name", { ascending: true });
 
   if (error) throw error;
   return data || [];
@@ -186,4 +190,134 @@ export const getSensorHistoryByPondForUser = async (
 
   await ensurePondAccess(userId, pondId);
   return getSensorHistoryByPond(pondId, limit);
+};
+
+// Latest cho toàn hệ thống (các pond mà user có quyền)
+export const getLatestSensorsByZoneAllForUser = async (
+  userId: string,
+  role?: string,
+) => {
+  let finalPondIds: string[] = [];
+
+  if (isAdmin(role)) {
+    // Admin: Lấy tất cả IDs của các ao đang hoạt động trong hệ thống
+    const { data: allPonds, error: pErr } = await supabase
+      .from("ponds")
+      .select("id");
+    if (pErr) throw pErr;
+    finalPondIds = (allPonds || []).map((p: any) => p.id);
+  } else {
+    // User thường: Lấy danh sách pond được phân quyền
+    finalPondIds = await getUserPondIds(userId);
+  }
+
+  if (!finalPondIds || finalPondIds.length === 0) return [];
+
+  // Lấy latest theo từng pond rồi concat
+  const results = await Promise.all(
+    finalPondIds.map((pid) => getLatestSensorsByPond(pid)),
+  );
+
+  // Chưa có distinct theo sensor, nhưng nếu sensor_id thuộc đúng pond thì concat là ổn.
+  return results.flat();
+};
+
+// CRUD Sensor metadata
+export const createSensor = async (
+  dto: {
+    pond_id: string;
+    name: string;
+    type: string;
+    unit: string;
+    status: "normal" | "warning" | "critical";
+    feed_key?: string;
+  },
+  userId: string,
+  role?: string,
+) => {
+  if (!userId) throw new Error("Yêu cầu đăng nhập");
+
+  if (!isAdmin(role)) {
+    await ensurePondAccess(userId, dto.pond_id);
+  }
+
+  const payload: any = {
+    pond_id: dto.pond_id,
+    name: dto.name,
+    type: dto.type,
+    unit: dto.unit,
+    status: dto.status,
+  };
+
+  if (dto.feed_key) payload.feed_key = dto.feed_key;
+
+  const { data, error } = await supabase
+    .from("sensors")
+    .insert(payload)
+    .select("id, pond_id, name, type, unit, status, feed_key")
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const updateSensor = async (
+  sensorId: string,
+  dto: {
+    pond_id?: string;
+    name?: string;
+    type?: string;
+    unit?: string;
+    status?: "normal" | "warning" | "critical";
+    feed_key?: string;
+  },
+  userId: string,
+  role?: string,
+) => {
+  if (!userId) throw new Error("Yêu cầu đăng nhập");
+
+  // Tối thiểu cần kiểm tra pond access nếu đổi pond_id.
+  if (!isAdmin(role) && dto.pond_id) {
+    await ensurePondAccess(userId, dto.pond_id);
+  }
+
+  const payload: any = { ...dto };
+  if (payload.feed_key === "") payload.feed_key = null;
+
+  const { data, error } = await supabase
+    .from("sensors")
+    .update(payload)
+    .eq("id", sensorId)
+    .select("id, pond_id, name, type, unit, status, feed_key")
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const deleteSensor = async (
+  sensorId: string,
+  userId: string,
+  role?: string,
+) => {
+  if (!userId) throw new Error("Yêu cầu đăng nhập");
+
+  // Kiểm tra pond access dựa trên sensors.pond_id
+  if (!isAdmin(role)) {
+    const { data: sensorRow, error: sErr } = await supabase
+      .from("sensors")
+      .select("pond_id")
+      .eq("id", sensorId)
+      .single();
+
+    if (sErr) throw sErr;
+    if (!sensorRow?.pond_id) throw new Error("Không tìm thấy sensor");
+
+    await ensurePondAccess(userId, sensorRow.pond_id);
+  }
+
+  const { error } = await supabase.from("sensors").delete().eq("id", sensorId);
+  if (error) throw error;
+
+  return "Đã xóa sensor thành công";
 };
