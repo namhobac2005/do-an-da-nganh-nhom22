@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router';
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router";
 import {
   LineChart,
   Line,
@@ -9,49 +9,47 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-} from 'recharts';
-import {
-  ThermometerSun,
-  Waves,
-  Sun,
-  Activity,
-} from 'lucide-react';
-import { ZonePondSelector } from '../../components/common/ZonePondSelector';
-import * as sensorService from '../../services/sensorService';
+} from "recharts";
+import { ThermometerSun, Waves, Sun, Activity, MapPin } from "lucide-react";
+import { ZonePondSelector } from "../../components/common/ZonePondSelector";
+import * as sensorService from "../../services/sensorService";
+import * as zoneService from "../../services/zoneService";
 
 const SENSOR_META: Record<string, any> = {
   temperature: {
-    label: 'Nhiệt độ',
-    color: '#f97316',
+    label: "Nhiệt độ",
+    color: "#f97316",
     icon: <ThermometerSun size={18} />,
-    unit: '°C',
-    yAxisId: 'left',
+    unit: "°C",
+    yAxisId: "left",
   },
-  'water-level': {
-    label: 'Mực nước',
-    color: '#3b82f6',
+  "water-level": {
+    label: "Mực nước",
+    color: "#3b82f6",
     icon: <Waves size={18} />,
-    unit: '%',
-    yAxisId: 'right',
+    unit: "%",
+    yAxisId: "right",
   },
   brightness: {
-    label: 'Ánh sáng',
-    color: '#eab308',
+    label: "Ánh sáng",
+    color: "#eab308",
     icon: <Sun size={18} />,
-    unit: '%',
-    yAxisId: 'right',
+    unit: "%",
+    yAxisId: "right",
   },
 };
 
 export const MonitoringPage: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const urlZoneId  = searchParams.get('zoneId');
-  const urlPondId  = searchParams.get('pondId');
+  const urlZoneId = searchParams.get("zoneId");
+  const urlPondId = searchParams.get("pondId");
 
-  const [selectedPond, setSelectedPond] = useState<string>(urlPondId || '');
-  const [sensors,      setSensors]      = useState<sensorService.SensorData[]>([]);
-  const [history,      setHistory]      = useState<sensorService.HistoryRecord[]>([]);
-  const [isLoading,    setIsLoading]    = useState(false);
+  const [selectedZone, setSelectedZone] = useState<string>(urlZoneId || "");
+  const [selectedPond, setSelectedPond] = useState<string>(urlPondId || "");
+  const [sensors, setSensors] = useState<sensorService.SensorData[]>([]);
+  const [history, setHistory] = useState<sensorService.HistoryRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [locationNames, setLocationNames] = useState({ zone: "", pond: "" });
 
   // Fetch cảm biến mới nhất + lịch sử cho ao đang chọn
   const loadMonitoringData = useCallback(async (pondId: string) => {
@@ -65,7 +63,7 @@ export const MonitoringPage: React.FC = () => {
       setSensors(latestData);
       setHistory(historyData);
     } catch (err) {
-      console.error('[MonitoringPage] Lỗi load dữ liệu giám sát:', err);
+      console.error("[MonitoringPage] Lỗi load dữ liệu giám sát:", err);
     } finally {
       setIsLoading(false);
     }
@@ -79,9 +77,24 @@ export const MonitoringPage: React.FC = () => {
       return;
     }
     loadMonitoringData(selectedPond);
-    const interval = setInterval(() => loadMonitoringData(selectedPond), 10_000);
+    const interval = setInterval(
+      () => loadMonitoringData(selectedPond),
+      10_000,
+    );
     return () => clearInterval(interval);
   }, [selectedPond, loadMonitoringData]);
+
+  // Tải thông tin tên Vùng và Ao để hiển thị trên Card
+  useEffect(() => {
+    if (selectedZone && selectedPond) {
+      zoneService
+        .getPondDetail(selectedZone, selectedPond)
+        .then((res) => {
+          setLocationNames({ zone: res.zone_name, pond: res.name });
+        })
+        .catch(() => setLocationNames({ zone: "---", pond: "---" }));
+    }
+  }, [selectedZone, selectedPond]);
 
   // 4. Xử lý dữ liệu hội tụ cho biểu đồ
   const chartData = useMemo(() => {
@@ -89,10 +102,10 @@ export const MonitoringPage: React.FC = () => {
     if (!history || history.length === 0) return [];
 
     history.forEach((item: any) => {
-      const timeDisplay = new Date(item.timestamp).toLocaleTimeString('vi-VN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
+      const timeDisplay = new Date(item.timestamp).toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
       });
 
       if (!groups[timeDisplay]) {
@@ -127,9 +140,12 @@ export const MonitoringPage: React.FC = () => {
     <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
       {/* CASCADING ZONE > POND SELECTOR */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-        <h3 className="text-slate-900 text-lg font-bold mb-4">Giám Sát Thực Tế</h3>
+        <h3 className="text-slate-900 text-lg font-bold mb-4">
+          Giám Sát Thực Tế
+        </h3>
         <ZonePondSelector
           onPondSelect={(pondId) => setSelectedPond(pondId)}
+          onZoneSelect={(zoneId) => setSelectedZone(zoneId)}
           initialPondId={urlPondId}
           initialZoneId={urlZoneId}
           className="w-full"
@@ -140,8 +156,13 @@ export const MonitoringPage: React.FC = () => {
         /* TRẠNG THÁI CHƯA CHỌN AO */
         <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border-2 border-dashed border-slate-200 text-slate-400">
           <Activity size={64} className="mb-4 opacity-20" />
-          <h3 className="text-xl font-bold text-slate-500">Chưa chọn ao nuôi</h3>
-          <p className="mt-1 text-sm">Vui lòng chọn <strong>Vùng nuôi</strong> rồi chọn <strong>Ao nuôi</strong> để kết nối dữ liệu từ thiết bị.</p>
+          <h3 className="text-xl font-bold text-slate-500">
+            Chưa chọn ao nuôi
+          </h3>
+          <p className="mt-1 text-sm">
+            Vui lòng chọn <strong>Vùng nuôi</strong> rồi chọn{" "}
+            <strong>Ao nuôi</strong> để kết nối dữ liệu từ thiết bị.
+          </p>
         </div>
       ) : (
         /* TRẠNG THÁI CÓ DỮ LIỆU */
@@ -171,10 +192,18 @@ export const MonitoringPage: React.FC = () => {
                         {meta.label}
                       </span>
                     </div>
+                    {/* Thông tin vị trí: Vùng / Ao */}
+                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
+                      <MapPin size={10} className="text-slate-300" />
+                      <span className="truncate max-w-[120px]">
+                        {locationNames.zone || "..."} /{" "}
+                        {locationNames.pond || "..."}
+                      </span>
+                    </div>
                   </div>
                   <div className="flex items-baseline gap-2">
                     <span className="text-4xl font-black text-slate-800">
-                      {sensorData?.value ?? '--'}
+                      {sensorData?.value ?? "--"}
                     </span>
                     <span className="text-slate-400 font-bold">
                       {meta.unit}
@@ -222,8 +251,8 @@ export const MonitoringPage: React.FC = () => {
 
                   <XAxis
                     dataKey="time"
-                    tick={{ fontSize: 11, fill: '#94a3b8' }}
-                    axisLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                    axisLine={{ stroke: "#cbd5e1", strokeWidth: 1 }}
                     tickLine={false}
                     minTickGap={15}
                     type="category"
@@ -233,9 +262,9 @@ export const MonitoringPage: React.FC = () => {
 
                   <YAxis
                     yAxisId="left"
-                    tick={{ fontSize: 12, fill: '#f97316', fontWeight: 'bold' }}
+                    tick={{ fontSize: 12, fill: "#f97316", fontWeight: "bold" }}
                     unit="°C"
-                    axisLine={{ stroke: '#f97316', strokeWidth: 2 }}
+                    axisLine={{ stroke: "#f97316", strokeWidth: 2 }}
                     tickLine={true}
                     padding={{ top: 20, bottom: 5 }}
                   />
@@ -243,27 +272,27 @@ export const MonitoringPage: React.FC = () => {
                   <YAxis
                     yAxisId="right"
                     orientation="right"
-                    tick={{ fontSize: 12, fill: '#3b82f6', fontWeight: 'bold' }}
+                    tick={{ fontSize: 12, fill: "#3b82f6", fontWeight: "bold" }}
                     unit="%"
-                    axisLine={{ stroke: '#3b82f6', strokeWidth: 2 }}
+                    axisLine={{ stroke: "#3b82f6", strokeWidth: 2 }}
                     tickLine={true}
                     padding={{ top: 20, bottom: 5 }}
                   />
 
                   <Tooltip
                     contentStyle={{
-                      borderRadius: '16px',
-                      border: 'none',
-                      boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                      borderRadius: "16px",
+                      border: "none",
+                      boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
                     }}
                   />
 
                   <Legend
                     iconType="circle"
                     wrapperStyle={{
-                      paddingTop: '30px',
-                      fontSize: '13px',
-                      fontWeight: 'bold',
+                      paddingTop: "30px",
+                      fontSize: "13px",
+                      fontWeight: "bold",
                     }}
                   />
 
@@ -277,7 +306,7 @@ export const MonitoringPage: React.FC = () => {
                       strokeWidth={4}
                       dot={{
                         r: 5,
-                        fill: '#fff',
+                        fill: "#fff",
                         stroke: meta.color,
                         strokeWidth: 3,
                       }}

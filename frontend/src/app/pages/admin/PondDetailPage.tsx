@@ -9,34 +9,68 @@
  *  - Each tab passes pondId to child components
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router';
+import { useState, useEffect, useCallback } from "react";
+import { useParams, useNavigate, Link } from "react-router";
 import {
-  ArrowLeft, ChevronRight, Fish, MapPin, RefreshCw,
-  LayoutDashboard, Cpu, Bell, Activity, AlertCircle,
-  Loader2, Users,
-} from 'lucide-react';
-import type { PondDetail } from '../../types/user.types';
-import * as zoneService from '../../services/zoneService';
-import * as alertService from '../../services/alertService';
-import * as deviceService from '../../services/deviceService';
-import * as sensorService from '../../services/sensorService';
-import { ShieldAlert, Droplets, Sun, ThermometerSun, Zap, Trash2, CheckCircle2 } from 'lucide-react';
+  ArrowLeft,
+  ChevronRight,
+  Fish,
+  MapPin,
+  RefreshCw,
+  LayoutDashboard,
+  Cpu,
+  Bell,
+  Activity,
+  AlertCircle,
+  Loader2,
+  Users,
+} from "lucide-react";
+import type { PondDetail } from "../../types/user.types";
+import * as zoneService from "../../services/zoneService";
+import * as alertService from "../../services/alertService";
+import * as deviceService from "../../services/deviceService";
+import * as sensorService from "../../services/sensorService";
+import {
+  ShieldAlert,
+  Droplets,
+  Sun,
+  ThermometerSun,
+  Zap,
+  Trash2,
+  CheckCircle2,
+} from "lucide-react";
 
-const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string }> = {
-  active:      { label: 'Hoạt động', bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500' },
-  inactive:    { label: 'Ngưng HĐ',  bg: 'bg-gray-100',    text: 'text-gray-600',    dot: 'bg-gray-400' },
-  maintenance: { label: 'Bảo trì',   bg: 'bg-amber-100',   text: 'text-amber-700',   dot: 'bg-amber-500' },
+const STATUS_CONFIG: Record<
+  string,
+  { label: string; bg: string; text: string; dot: string }
+> = {
+  active: {
+    label: "Hoạt động",
+    bg: "bg-emerald-100",
+    text: "text-emerald-700",
+    dot: "bg-emerald-500",
+  },
+  inactive: {
+    label: "Ngưng HĐ",
+    bg: "bg-gray-100",
+    text: "text-gray-600",
+    dot: "bg-gray-400",
+  },
+  maintenance: {
+    label: "Bảo trì",
+    bg: "bg-amber-100",
+    text: "text-amber-700",
+    dot: "bg-amber-500",
+  },
 };
 // ===== TAB CONTENT =====
 
-
 // ===== TAB DEFINITIONS =====
-type TabKey = 'dashboard' | 'devices' | 'alerts';
+type TabKey = "dashboard" | "devices" | "alerts";
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
-  { key: 'dashboard', label: 'Dashboard',  icon: <LayoutDashboard size={16} /> },
-  { key: 'devices',   label: 'Thiết bị',   icon: <Cpu size={16} /> },
-  { key: 'alerts',    label: 'Cảnh báo',   icon: <Bell size={16} /> },
+  { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={16} /> },
+  { key: "devices", label: "Thiết bị", icon: <Cpu size={16} /> },
+  { key: "alerts", label: "Cảnh báo", icon: <Bell size={16} /> },
 ];
 
 const DashboardTab: React.FC<{ pondId: string }> = ({ pondId }) => {
@@ -44,13 +78,19 @@ const DashboardTab: React.FC<{ pondId: string }> = ({ pondId }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    sensorService.getLatestSensors(pondId)
+    sensorService
+      .getLatestSensors(pondId)
       .then(setSensors)
       .catch(() => setSensors([]))
       .finally(() => setLoading(false));
   }, [pondId]);
 
-  if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-emerald-500" /></div>;
+  if (loading)
+    return (
+      <div className="flex justify-center p-8">
+        <Loader2 className="animate-spin text-emerald-500" />
+      </div>
+    );
 
   if (sensors.length === 0) {
     return (
@@ -62,19 +102,29 @@ const DashboardTab: React.FC<{ pondId: string }> = ({ pondId }) => {
   }
 
   const getIcon = (type: string) => {
-    if (type.toLowerCase().includes('nhiệt độ')) return <ThermometerSun size={20} className="text-orange-500" />;
-    if (type.toLowerCase().includes('sáng')) return <Sun size={20} className="text-amber-500" />;
+    if (type.toLowerCase().includes("nhiệt độ"))
+      return <ThermometerSun size={20} className="text-orange-500" />;
+    if (type.toLowerCase().includes("sáng"))
+      return <Sun size={20} className="text-amber-500" />;
     return <Droplets size={20} className="text-blue-500" />;
   };
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {sensors.map(s => (
-        <div key={s.id} className="bg-white p-5 rounded-2xl border border-gray-100 flex items-center gap-4 shadow-sm">
+      {sensors.map((s) => (
+        <div
+          key={s.id}
+          className="bg-white p-5 rounded-2xl border border-gray-100 flex items-center gap-4 shadow-sm"
+        >
           <div className="p-3 bg-gray-50 rounded-xl">{getIcon(s.type)}</div>
           <div>
             <p className="text-sm text-gray-500 font-medium">{s.name}</p>
-            <p className="text-2xl font-bold text-gray-800">{s.value} <span className="text-sm font-normal text-gray-500">{s.unit}</span></p>
+            <p className="text-2xl font-bold text-gray-800">
+              {s.value}{" "}
+              <span className="text-sm font-normal text-gray-500">
+                {s.unit}
+              </span>
+            </p>
           </div>
         </div>
       ))}
@@ -87,16 +137,31 @@ const DevicesTab: React.FC<{ pondId: string }> = ({ pondId }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    deviceService.getAllDevices()
-      .then(res => setDevices(res
-        .filter(d => d.pond_id === pondId)
-        .map(d => ({ ...d, status: ((d as any).status ?? 'OFF') } as deviceService.Device))
-      ))
+    deviceService
+      .getAllDevices()
+      .then((res) =>
+        setDevices(
+          res
+            .filter((d) => d.pond_id === pondId)
+            .map(
+              (d) =>
+                ({
+                  ...d,
+                  status: (d as any).status ?? "OFF",
+                }) as deviceService.Device,
+            ),
+        ),
+      )
       .catch(() => setDevices([]))
       .finally(() => setLoading(false));
   }, [pondId]);
 
-  if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-emerald-500" /></div>;
+  if (loading)
+    return (
+      <div className="flex justify-center p-8">
+        <Loader2 className="animate-spin text-emerald-500" />
+      </div>
+    );
 
   if (devices.length === 0) {
     return (
@@ -119,16 +184,22 @@ const DevicesTab: React.FC<{ pondId: string }> = ({ pondId }) => {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {devices.map(d => (
+          {devices.map((d) => (
             <tr key={d.id} className="hover:bg-gray-50/50">
               <td className="p-4 font-medium text-gray-800">{d.name}</td>
               <td className="p-4 text-sm text-gray-600">{d.type}</td>
               <td className="p-4">
-                <span className={`px-2 py-1 rounded-md text-xs font-semibold ${d.status === 'ON' || d.status === '1' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-700'}`}>
-                  {d.status === 'ON' || d.status === '1' ? 'Đang bật' : 'Đang tắt'}
+                <span
+                  className={`px-2 py-1 rounded-md text-xs font-semibold ${d.status === "ON" || d.status === "1" ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700"}`}
+                >
+                  {d.status === "ON" || d.status === "1"
+                    ? "Đang bật"
+                    : "Đang tắt"}
                 </span>
               </td>
-              <td className="p-4 text-sm text-gray-600">{d.mode === 'auto' ? 'Tự động' : 'Thủ công'}</td>
+              <td className="p-4 text-sm text-gray-600">
+                {d.mode === "auto" ? "Tự động" : "Thủ công"}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -142,13 +213,19 @@ const AlertsTab: React.FC<{ pondId: string }> = ({ pondId }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    alertService.getAlertLogs({ zoneId: pondId, limit: 5 })
-      .then(res => setLogs(res.data))
+    alertService
+      .getAlertLogs({ zoneId: pondId, limit: 5 })
+      .then((res) => setLogs(res.data))
       .catch(() => setLogs([]))
       .finally(() => setLoading(false));
   }, [pondId]);
 
-  if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-emerald-500" /></div>;
+  if (loading)
+    return (
+      <div className="flex justify-center p-8">
+        <Loader2 className="animate-spin text-emerald-500" />
+      </div>
+    );
 
   if (logs.length === 0) {
     return (
@@ -171,18 +248,28 @@ const AlertsTab: React.FC<{ pondId: string }> = ({ pondId }) => {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {logs.map(log => {
+          {logs.map((log) => {
             const dt = new Date(log.created_at);
             return (
               <tr key={log.id} className="hover:bg-gray-50/50">
                 <td className="p-4 text-sm text-gray-600">
-                  {dt.toLocaleDateString('vi-VN')} {dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                  {dt.toLocaleDateString("vi-VN")}{" "}
+                  {dt.toLocaleTimeString("vi-VN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </td>
-                <td className="p-4 text-sm font-medium text-gray-700">{log.metric}</td>
-                <td className="p-4 text-sm text-red-600 font-bold">{log.recorded_value}</td>
+                <td className="p-4 text-sm font-medium text-gray-700">
+                  {log.metric}
+                </td>
+                <td className="p-4 text-sm text-red-600 font-bold">
+                  {log.recorded_value}
+                </td>
                 <td className="p-4">
-                  <span className={`px-2 py-1 rounded-md text-xs font-semibold ${log.status === 'unread' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                    {log.status === 'unread' ? 'Chưa xử lý' : 'Đã xử lý'}
+                  <span
+                    className={`px-2 py-1 rounded-md text-xs font-semibold ${log.status === "unread" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}
+                  >
+                    {log.status === "unread" ? "Chưa xử lý" : "Đã xử lý"}
                   </span>
                 </td>
               </tr>
@@ -196,8 +283,8 @@ const AlertsTab: React.FC<{ pondId: string }> = ({ pondId }) => {
 
 const TAB_COMPONENTS: Record<TabKey, React.FC<{ pondId: string }>> = {
   dashboard: DashboardTab,
-  devices:   DevicesTab,
-  alerts:    AlertsTab,
+  devices: DevicesTab,
+  alerts: AlertsTab,
 };
 
 // ===== MAIN PAGE =====
@@ -208,7 +295,7 @@ export const PondDetailPage: React.FC = () => {
   const [pond, setPond] = useState<PondDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabKey>('dashboard');
+  const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
 
   const fetchData = useCallback(async () => {
     if (!zoneId || !pondId) return;
@@ -224,7 +311,9 @@ export const PondDetailPage: React.FC = () => {
     }
   }, [zoneId, pondId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   if (isLoading) {
     return (
@@ -238,10 +327,14 @@ export const PondDetailPage: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center py-16 bg-white rounded-2xl border border-gray-100">
         <AlertCircle size={32} className="text-red-400 mb-3" />
-        <p className="text-gray-600 text-sm font-medium mb-1">Không thể tải thông tin ao nuôi</p>
+        <p className="text-gray-600 text-sm font-medium mb-1">
+          Không thể tải thông tin ao nuôi
+        </p>
         <p className="text-gray-400 text-xs mb-4">{error}</p>
-        <button onClick={fetchData}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">
+        <button
+          onClick={fetchData}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700"
+        >
           <RefreshCw size={13} /> Thử lại
         </button>
       </div>
@@ -255,10 +348,18 @@ export const PondDetailPage: React.FC = () => {
     <div className="space-y-5">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm flex-wrap">
-        <Link to="/zones" className="text-emerald-600 hover:underline font-medium">Vùng nuôi</Link>
+        <Link
+          to="/zones"
+          className="text-emerald-600 hover:underline font-medium"
+        >
+          Vùng nuôi
+        </Link>
         <ChevronRight size={14} className="text-gray-400" />
-        <Link to={`/zones/${zoneId}/ponds`} className="text-emerald-600 hover:underline font-medium">
-          {pond.zone_name ?? 'Vùng'}
+        <Link
+          to={`/zones/${zoneId}/ponds`}
+          className="text-emerald-600 hover:underline font-medium"
+        >
+          {pond.zone_name ?? "Vùng"}
         </Link>
         <ChevronRight size={14} className="text-gray-400" />
         <span className="text-gray-700 font-semibold">{pond.name}</span>
@@ -268,8 +369,10 @@ export const PondDetailPage: React.FC = () => {
       <div className="bg-gradient-to-br from-blue-900 to-teal-800 rounded-2xl p-6 text-white">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <button onClick={() => navigate(`/zones/${zoneId}/ponds`)}
-              className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors">
+            <button
+              onClick={() => navigate(`/zones/${zoneId}/ponds`)}
+              className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+            >
               <ArrowLeft size={18} />
             </button>
             <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
@@ -295,12 +398,17 @@ export const PondDetailPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.text}`}>
+            <span
+              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.text}`}
+            >
               <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
               {cfg.label}
             </span>
-            <button onClick={fetchData}
-              className="p-2 rounded-lg hover:bg-white/10 text-white/60 transition-colors" title="Làm mới">
+            <button
+              onClick={fetchData}
+              className="p-2 rounded-lg hover:bg-white/10 text-white/60 transition-colors"
+              title="Làm mới"
+            >
               <RefreshCw size={16} />
             </button>
           </div>
@@ -334,7 +442,9 @@ export const PondDetailPage: React.FC = () => {
               <Fish size={14} />
               <span>Loại nuôi</span>
             </div>
-            <p className="text-sm font-semibold truncate mt-1">{pond.farming_type ?? 'Chưa xác định'}</p>
+            <p className="text-sm font-semibold truncate mt-1">
+              {pond.farming_type ?? "Chưa xác định"}
+            </p>
           </div>
         </div>
       </div>
@@ -347,8 +457,8 @@ export const PondDetailPage: React.FC = () => {
             onClick={() => setActiveTab(tab.key)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all flex-1 justify-center ${
               activeTab === tab.key
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                ? "bg-white text-gray-900 shadow-sm"
+                : "text-gray-500 hover:text-gray-700 hover:bg-white/50"
             }`}
           >
             {tab.icon}

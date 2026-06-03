@@ -108,7 +108,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
         <Waves size={36} className="text-gray-200 mb-3" />
         <p className="text-gray-500 text-sm font-medium">Chưa có sensor</p>
         <p className="text-gray-400 text-xs mt-1">
-          Chọn ao khác hoặc nhấn “Thêm Sensor”.
+          Chọn ao khác hoặc nhấn "Thêm Sensor".
         </p>
       </div>
     );
@@ -136,6 +136,16 @@ export const SensorTable: React.FC<SensorTableProps> = ({
                     <p className="text-gray-900 text-sm font-bold truncate">
                       {s.name}
                     </p>
+                    {/* Location - vùng nuôi */}
+                    {s.zone_name && (
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {s.zone_name}
+                      </p>
+                    )}
+                    {/* Location - ao số */}
+                    {s.pond_name && (
+                      <p className="text-xs text-gray-500">{s.pond_name}</p>
+                    )}
                     <p className={`text-xs mt-0.5 ${cfg.text}`}>
                       {s.type} • {s.unit}
                     </p>
